@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Tests (et régénération des types TypeScript)
+        run: cargo test --locked
+      - name: Types TypeScript à jour
+        run: git diff --exit-code -- web/src/bindings
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [rust, web]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construction des images
+        run: docker compose build
+      - name: Démarrage et test de fumée
+        run: |
+          docker compose up -d --wait
+          curl -fsS http://127.0.0.1:8080/healthz
+          curl -fsS http://127.0.0.1:8080/api/sante
+          curl -fsS -X POST http://127.0.0.1:8080/api/calcul \
+            -H 'content-type: application/json' \
+            -d "{\"questionnaire\": $(curl -fsS http://127.0.0.1:8080/api/exemple)}" \
+            | grep -q '"poche_2"'
+      - if: always()
+        run: docker compose logs && docker compose down

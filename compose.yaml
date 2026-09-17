@@ -1,0 +1,34 @@
+name: allocation-patrimoniale
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    image: allocation-patrimoniale/api:latest
+    restart: unless-stopped
+    environment:
+      BIND_ADDR: 0.0.0.0:8080
+      RUST_LOG: info
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    # Pas de port publié : l'API n'est joignable que via le front.
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    image: allocation-patrimoniale/web:latest
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      # Accessible uniquement depuis cette machine. Changer le port avec WEB_PORT=xxxx.
+      - "127.0.0.1:${WEB_PORT:-8080}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
