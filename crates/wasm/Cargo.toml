@@ -1,0 +1,16 @@
+[package]
+name = "allocation-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Moteur d'allocation compilé en WebAssembly pour la version statique (GitHub Pages)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+engine = { path = "../engine" }
+serde.workspace = true
+serde_json.workspace = true
+# Version épinglée : wasm-bindgen-cli (workflow Pages) doit avoir exactement la même.
+wasm-bindgen = "=0.2.128"

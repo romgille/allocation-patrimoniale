@@ -1,0 +1,66 @@
+name: GitHub Pages
+
+# Version statique : le moteur Rust est compilé en WebAssembly et tourne dans le navigateur.
+# Construit sur chaque pull request (vérification), publié à chaque push sur main.
+# Prérequis (une fois) : Settings → Pages → Source : « GitHub Actions ».
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: wasm-bindgen-cli (même version que la crate)
+        run: |
+          VERSION=$(cargo pkgid -p wasm-bindgen | sed 's/.*[#@]//')
+          if [ "$(wasm-bindgen --version 2>/dev/null)" != "wasm-bindgen $VERSION" ]; then
+            cargo install wasm-bindgen-cli --version "$VERSION" --locked --force
+          fi
+      - name: Moteur en WebAssembly
+        run: make wasm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Front (mode pages)
+        working-directory: web
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/
+        run: |
+          npm ci
+          npm run build:pages
+          cp dist/index.html dist/404.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

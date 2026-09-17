@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { calculer, chargerExemple, chargerHypotheses } from './api'
+import { calculer, chargerExemple, chargerHypotheses, mentionDonnees } from './moteur'
 import type { Hypotheses } from './bindings/Hypotheses'
 import type { Questionnaire } from './bindings/Questionnaire'
 import type { Resultat } from './bindings/Resultat'
@@ -87,7 +87,7 @@ export default function App() {
           setH(d)
         }
       } catch (e) {
-        setErreurReseau(`Impossible de joindre l'API : ${String(e)}`)
+        setErreurReseau(`Impossible de charger le moteur de calcul : ${String(e)}`)
       }
     })()
     return () => {
@@ -328,7 +328,7 @@ export default function App() {
 
       <footer className="pied">
         Outil informatif et pédagogique : ne constitue pas un conseil en investissement. Faire valider la fiscalité
-        (PFU, prélèvements sociaux, LMNP, PER) par une source à jour. Aucune donnée n'est conservée par le serveur.
+        (PFU, prélèvements sociaux, LMNP, PER) par une source à jour. {mentionDonnees}
       </footer>
     </div>
   )

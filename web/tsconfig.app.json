@@ -22,7 +22,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    /* Moteur par défaut pour la vérification des types (wasm.ts est vérifié aussi, via include) */
+    "paths": { "@moteur": ["./src/moteur/http.ts"] }
   },
   "include": ["src"]
 }
