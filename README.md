@@ -1,13 +1,20 @@
 # Allocation patrimoniale
 
-Outil web local qui applique la logique d'allocation « études des enfants + revenus passifs »
+Outil web qui applique la logique d'allocation « études des enfants + revenus passifs »
 (résident fiscal français, paramètres septembre 2026) à partir d'un questionnaire.
 
 > Outil informatif et pédagogique : ce n'est pas un conseil en investissement.
 
 ## Démarrer
 
-Il faut Docker et Docker Compose.
+Deux façons de l'utiliser :
+
+- **En ligne, sans rien installer** : https://romgille.github.io/allocation-patrimoniale/.
+  Le moteur Rust y est compilé en WebAssembly et tourne dans le navigateur : les données saisies
+  ne quittent pas l'appareil (brouillon local et export JSON, comme la version Docker).
+- **En local avec Docker**, décrit ci-dessous.
+
+Pour Docker, il faut Docker et Docker Compose.
 
 ```bash
 docker compose up -d --build
@@ -29,8 +36,10 @@ navigateur ──► web (nginx, non root) ──/api──► api (Rust/axum, d
 | Dossier | Contenu |
 |---|---|
 | `crates/engine` | Moteur de calcul en Rust : types d'entrée/sortie, poches 0/1/2, profils, modificateurs, garde-fous, répartition des flux, alertes. Testé unitairement. |
+| `crates/wasm` | Le même moteur exposé en WebAssembly (`hypotheses`, `exemple`, `calculer`, en JSON) pour la version GitHub Pages. |
 | `crates/api` | API HTTP axum : `GET /api/hypotheses`, `GET /api/exemple`, `POST /api/calcul`, `GET /api/sante`. |
 | `web` | Front React + TypeScript (strict). Les types de `web/src/bindings` sont **générés depuis Rust** avec ts-rs : le contrat front/back est vérifié à la compilation. |
+| `web/src/moteur` | Accès au moteur : `http.ts` (API, version Docker) ou `wasm.ts` (navigateur, version Pages), choisi à la construction. |
 | `docker` | Dockerfiles multi-étapes et configuration nginx (CSP, en-têtes de sécurité). |
 
 **Sans état** : le serveur ne stocke rien. Les exports de la première version (un seul profil
@@ -70,6 +79,24 @@ make check       # tests, clippy et typecheck du front
 Après toute modification d'un type Rust exposé, lancer `make types` (ou `cargo test -p engine`) :
 les fichiers de `web/src/bindings` sont régénérés et le compilateur TypeScript signale ce qu'il
 faut adapter.
+
+### Version GitHub Pages
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.128   # même version que dans crates/wasm/Cargo.toml
+make pages       # moteur en WebAssembly (web/wasm-pkg) puis front en mode pages (web/dist)
+make dev-pages   # idem en développement, sans API
+```
+
+`npm run build:pages` construit le front avec `--mode pages` : `@moteur` pointe alors vers
+`wasm.ts` et les chemins sont préfixés par `BASE_PATH` (`/allocation-patrimoniale/` par défaut).
+
+Le workflow `.github/workflows/pages.yml` construit cette version sur chaque pull request et la
+publie à chaque push sur `main`. À activer une fois dans le dépôt : **Settings → Pages →
+Source : GitHub Actions**.
+
+### CI
 
 La CI GitHub (`.github/workflows/ci.yml`) lance les tests, clippy et le build du front. Elle
 vérifie que les types générés sont à jour, construit les images Docker et fait un test de fumée
