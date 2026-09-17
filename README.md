@@ -122,3 +122,7 @@ Là où la spécification laisse une marge, voici ce que fait le moteur (tout es
 - **Crypto** : 0 par défaut. Si vous en voulez, elle est plafonnée à 3 % et prise sur la ligne
   actions en direct.
 - **Private equity** : compté dans les satellites, sans nouvel apport.
+
+## Licence
+
+GPL-3.0-or-later — voir [LICENSE](LICENSE).
