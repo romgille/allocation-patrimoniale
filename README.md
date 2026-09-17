@@ -71,6 +71,10 @@ Après toute modification d'un type Rust exposé, lancer `make types` (ou `cargo
 les fichiers de `web/src/bindings` sont régénérés et le compilateur TypeScript signale ce qu'il
 faut adapter.
 
+La CI GitHub (`.github/workflows/ci.yml`) lance les tests, clippy et le build du front. Elle
+vérifie que les types générés sont à jour, construit les images Docker et fait un test de fumée
+via `docker compose up`.
+
 ## Saisie en famille : règles retenues
 
 - **Profil de risque** : la tolérance la plus faible des adultes est retenue. Une alerte apparaît
