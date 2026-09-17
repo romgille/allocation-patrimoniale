@@ -28,7 +28,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: wasm-bindgen-cli (même version que la crate)
         run: |
-          VERSION=$(cargo pkgid -p wasm-bindgen | sed 's/.*[#@]//')
+          VERSION=$(cargo pkgid wasm-bindgen | sed 's/.*[#@]//')
           if [ "$(wasm-bindgen --version 2>/dev/null)" != "wasm-bindgen $VERSION" ]; then
             cargo install wasm-bindgen-cli --version "$VERSION" --locked --force
           fi
