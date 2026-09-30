@@ -8,7 +8,7 @@ use crate::params::{Allocation, Hypotheses, Ligne, Profil};
 const EPS: f64 = 1e-9;
 
 pub fn score(q: &Questionnaire, h: &Hypotheses) -> (f64, Vec<DetailScore>) {
-    let f = q.foyer();
+    let f = q.foyer(h);
     let tol_libelle = if f.en_couple && f.tol_max != f.tol_risque {
         format!("Tolérance au risque ({}/5, la plus prudente du foyer)", f.tol_risque)
     } else {
@@ -126,7 +126,7 @@ fn pct(v: f64) -> String {
 }
 
 pub fn allocation_cible(q: &Questionnaire, h: &Hypotheses, ctx: &Contexte, profil_score: Profil) -> Cible {
-    let f = q.foyer();
+    let f = q.foyer(h);
     let mut aj = Vec::new();
     let mut profil = profil_score;
 

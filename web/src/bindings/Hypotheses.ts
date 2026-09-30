@@ -18,4 +18,36 @@ seuil_score_prudent: number,
 /**
  * score > seuil → Dynamique.
  */
-seuil_score_dynamique: number, h_fire_court: number, h_fire_long: number, precaution_mois_min: number, precaution_mois_defaut: number, precaution_mois_max: number, seuil_taux_dette: number, endettement_max: number, age_regle_actions: number, actions_max_tolerance_faible: number, plancher_fonds_euros: number, plancher_fonds_euros_horizon_court: number, or_min: number, or_max: number, crowdfunding_max: number, actions_directes_max: number, satellites_max: number, crypto_max: number, immo_max: number, immo_max_gestion_elevee: number, seuil_concentration_immo: number, tolerance_reequilibrage: number, plafond_pea: number, pfu: number, prelevements_sociaux: number, abattement_av_seul: number, abattement_av_couple: number, abattement_donation: number, plafond_per_revenus: number, annees_derisquage: number, annees_coussin: number, };
+seuil_score_dynamique: number, h_fire_court: number, h_fire_long: number, precaution_mois_min: number, precaution_mois_defaut: number, precaution_mois_max: number, 
+/**
+ * Au-dessus de ce taux, un crédit est remboursé en priorité quel que soit le
+ * rendement attendu. Entre le rendement net de la poche 2 et ce seuil, l'outil
+ * signale l'arbitrage sans l'imposer.
+ */
+seuil_taux_dette: number, endettement_max: number, 
+/**
+ * Écart toléré entre la mensualité saisie et la mensualité théorique (taux, durée,
+ * restant dû) avant de signaler une incohérence.
+ */
+ecart_mensualite_max: number, 
+/**
+ * Part des loyers retenue par les banques dans le calcul du taux d'endettement.
+ */
+ponderation_loyers_bancaire: number, 
+/**
+ * Part du prix d'un bien qui s'amortit (le terrain ne s'amortit pas).
+ */
+part_amortissable: number, duree_amortissement_ans: number, is_taux_reduit: number, is_seuil_taux_reduit: number, is_taux_normal: number, 
+/**
+ * Déficit foncier imputable sur le revenu global (par an).
+ */
+deficit_foncier_max: number, 
+/**
+ * Taux d'impôt sur la plus-value immobilière des particuliers (hors prélèvements
+ * sociaux et surtaxe).
+ */
+taux_pv_immobiliere: number, 
+/**
+ * Revalorisation annuelle supposée du prix des biens immobiliers.
+ */
+revalorisation_immobilier: number, age_regle_actions: number, actions_max_tolerance_faible: number, plancher_fonds_euros: number, plancher_fonds_euros_horizon_court: number, or_min: number, or_max: number, crowdfunding_max: number, actions_directes_max: number, satellites_max: number, crypto_max: number, immo_max: number, immo_max_gestion_elevee: number, seuil_concentration_immo: number, tolerance_reequilibrage: number, plafond_pea: number, pfu: number, prelevements_sociaux: number, abattement_av_seul: number, abattement_av_couple: number, abattement_donation: number, plafond_per_revenus: number, annees_derisquage: number, annees_coussin: number, };

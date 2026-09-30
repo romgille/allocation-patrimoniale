@@ -206,8 +206,31 @@ pub struct Hypotheses {
     pub precaution_mois_min: f64,
     pub precaution_mois_defaut: f64,
     pub precaution_mois_max: f64,
+    /// Au-dessus de ce taux, un crédit est remboursé en priorité quel que soit le
+    /// rendement attendu. Entre le rendement net de la poche 2 et ce seuil, l'outil
+    /// signale l'arbitrage sans l'imposer.
     pub seuil_taux_dette: f64,
     pub endettement_max: f64,
+    /// Écart toléré entre la mensualité saisie et la mensualité théorique (taux, durée,
+    /// restant dû) avant de signaler une incohérence.
+    pub ecart_mensualite_max: f64,
+    /// Part des loyers retenue par les banques dans le calcul du taux d'endettement.
+    pub ponderation_loyers_bancaire: f64,
+
+    // --- SCI et immobilier ---
+    /// Part du prix d'un bien qui s'amortit (le terrain ne s'amortit pas).
+    pub part_amortissable: f64,
+    pub duree_amortissement_ans: u32,
+    pub is_taux_reduit: f64,
+    pub is_seuil_taux_reduit: f64,
+    pub is_taux_normal: f64,
+    /// Déficit foncier imputable sur le revenu global (par an).
+    pub deficit_foncier_max: f64,
+    /// Taux d'impôt sur la plus-value immobilière des particuliers (hors prélèvements
+    /// sociaux et surtaxe).
+    pub taux_pv_immobiliere: f64,
+    /// Revalorisation annuelle supposée du prix des biens immobiliers.
+    pub revalorisation_immobilier: f64,
 
     // --- Garde-fous ---
     pub age_regle_actions: u32,
@@ -292,6 +315,16 @@ impl Default for Hypotheses {
             precaution_mois_max: 6.0,
             seuil_taux_dette: 0.05,
             endettement_max: 0.35,
+            ecart_mensualite_max: 0.05,
+            ponderation_loyers_bancaire: 0.70,
+            part_amortissable: 0.85,
+            duree_amortissement_ans: 30,
+            is_taux_reduit: 0.15,
+            is_seuil_taux_reduit: 42_500.0,
+            is_taux_normal: 0.25,
+            deficit_foncier_max: 10_700.0,
+            taux_pv_immobiliere: 0.19,
+            revalorisation_immobilier: 0.01,
             age_regle_actions: 110,
             actions_max_tolerance_faible: 0.65,
             plancher_fonds_euros: 0.10,

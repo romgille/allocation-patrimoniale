@@ -6,8 +6,10 @@ import type { Depense } from "./Depense";
 import type { Dette } from "./Dette";
 import type { Enfant } from "./Enfant";
 import type { Projet } from "./Projet";
+import type { Sci } from "./Sci";
 import type { StatutRp } from "./StatutRp";
 import type { Tmi } from "./Tmi";
+import type { VenteImmobiliere } from "./VenteImmobiliere";
 
 export type Questionnaire = { adultes: Array<Adulte>, tmi: Tmi, rp: StatutRp, lep_eligible: boolean, depenses: Array<Depense>, 
 /**
@@ -23,10 +25,18 @@ h_fire: number,
  */
 r_cible: number, taux_retrait_pct: number, autres_revenus_passifs: number, enfants: Array<Enfant>, projets: Array<Projet>, avoirs: Avoirs, 
 /**
- * Valeur nette (valeur − capital restant dû) de l'immobilier locatif.
+ * Valeur nette (valeur − capital restant dû) de l'immobilier locatif détenu en direct.
  */
 v_immo_loc: number, 
 /**
- * Cash-flow net mensuel du locatif (après crédit, charges, impôts).
+ * Cash-flow net mensuel du locatif direct (après crédit, charges, impôts).
  */
-cf_immo: number, dettes: Array<Dette>, contraintes: Contraintes, };
+cf_immo: number, 
+/**
+ * Sociétés civiles immobilières du foyer.
+ */
+scis: Array<Sci>, 
+/**
+ * Ventes immobilières programmées.
+ */
+ventes: Array<VenteImmobiliere>, dettes: Array<Dette>, contraintes: Contraintes, };

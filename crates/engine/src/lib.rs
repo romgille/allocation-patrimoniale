@@ -3,12 +3,15 @@
 //!
 //! Point d'entrée : [`calculer`]. Informatif et pédagogique, pas un conseil en investissement.
 
+pub mod cession;
+pub mod credit;
 pub mod finance;
 pub mod model;
 pub mod output;
 pub mod params;
 pub mod poche1;
 pub mod poche2;
+pub mod sci;
 mod validation;
 
 pub use model::*;
@@ -21,6 +24,15 @@ use poche2::{allocation_actuelle_eur, allocation_cible, contexte, profil_depuis_
 
 fn pct(v: f64) -> String {
     format!("{:.1} %", v * 100.0).replace('.', ",")
+}
+
+/// Formatage partagé avec les modules `sci` et `cession`.
+pub(crate) fn pct_public(v: f64) -> String {
+    pct(v)
+}
+
+pub(crate) fn eur_public(v: f64) -> String {
+    eur(v)
 }
 
 fn eur(v: f64) -> String {
@@ -79,7 +91,7 @@ fn enveloppe_et_support(
                 } else {
                     "SCPI en assurance-vie de préférence".to_string()
                 };
-                let sup = if q.foyer().temps_gestion == TempsGestion::Faible || q.contraintes.refus_immo_direct {
+                let sup = if q.foyer(h).temps_gestion == TempsGestion::Faible || q.contraintes.refus_immo_direct {
                     "2–3 SCPI diversifiées/européennes sans frais d'entrée, ou ETF immobilier coté"
                 } else {
                     "SCPI ; locatif direct uniquement financé à crédit (levier)"
@@ -110,18 +122,34 @@ fn enveloppe_et_support(
 
 /// Simulation mensuelle de la poche 2 : l'épargne comble d'abord la précaution et les
 /// dettes chères, puis finance les projets en cours (par priorité) ; le reste va en poche 2.
-/// Quand un projet arrive à échéance, son versement est libéré pour la poche 2.
+///
+/// L'épargne disponible n'est pas constante dans le temps :
+/// - quand un projet arrive à échéance, son versement est libéré ;
+/// - quand un crédit du foyer se termine, sa mensualité revient à l'épargne ;
+/// - quand une SCI cesse d'être en trésorerie négative, l'effort du foyer disparaît ;
+/// - une vente programmée verse son produit net en une fois.
 struct Simulation<'a> {
     capital: f64,
     e_mois: f64,
     a_combler: f64,
     poches: &'a [SousPoche],
     rendement: f64,
+    /// Mensualités du foyer qui se libèrent : (mois de fin, montant).
+    liberations: Vec<(u32, f64)>,
+    /// Produits nets des ventes : (mois, montant), déjà nets d'impôt et de crédit soldé.
+    apports: Vec<(u32, f64)>,
 }
 
 impl Simulation<'_> {
+    /// Épargne mensuelle disponible au mois `mois`.
+    fn e_mois_a(&self, mois: u32) -> f64 {
+        let liberees: f64 =
+            self.liberations.iter().filter(|(fin, _)| mois >= *fin).map(|(_, m)| m).fold(0.0, |a, b| a + b);
+        (self.e_mois + liberees).max(0.0)
+    }
+
     fn flux_poche2(&self, mois: u32, a_combler: &mut f64) -> f64 {
-        let mut e = self.e_mois;
+        let mut e = self.e_mois_a(mois);
         let c = e.min(*a_combler);
         *a_combler -= c;
         e -= c;
@@ -131,12 +159,17 @@ impl Simulation<'_> {
         (e - projets).max(0.0)
     }
 
+    /// Produit des ventes tombant exactement au mois `mois`.
+    fn apport_a(&self, mois: u32) -> f64 {
+        self.apports.iter().filter(|(m, _)| *m == mois).map(|(_, v)| v).fold(0.0, |a, b| a + b)
+    }
+
     fn capital_a(&self, mois: u32) -> f64 {
         let i = self.rendement / 12.0;
         let mut k = self.capital;
         let mut a_combler = self.a_combler;
         for m in 0..mois {
-            k = k * (1.0 + i) + self.flux_poche2(m, &mut a_combler);
+            k = k * (1.0 + i) + self.flux_poche2(m, &mut a_combler) + self.apport_a(m);
         }
         k
     }
@@ -145,6 +178,139 @@ impl Simulation<'_> {
         let mut a_combler = self.a_combler;
         (0..mois).map(|m| self.flux_poche2(m, &mut a_combler)).fold(0.0, |a, b| a + b)
     }
+}
+
+/// Lecture de chaque crédit : coût réel, cohérence de la saisie et arbitrage entre
+/// rembourser par anticipation et investir. Renvoie les analyses, le capital des crédits
+/// à rembourser en priorité, et les alertes correspondantes.
+fn analyser_credits(
+    q: &Questionnaire,
+    h: &Hypotheses,
+    rendement_net: f64,
+) -> (Vec<AnalyseCredit>, f64, Vec<Alerte>) {
+    let mut alertes = Vec::new();
+    let mut du_prioritaire = 0.0;
+    let mut credits = Vec::new();
+
+    for d in &q.dettes {
+        let taux = d.taux();
+        let porte_par = match &d.sci_id {
+            None => "Foyer".to_string(),
+            Some(id) => q
+                .scis
+                .iter()
+                .find(|s| &s.id == id)
+                .map(|s| s.nom.clone())
+                .unwrap_or_else(|| "SCI inconnue".into()),
+        };
+
+        // Cohérence : avec ce taux, ce capital et cette durée, la mensualité devrait être…
+        let theorique = credit::mensualite_theorique(d.restant_du, taux, d.duree_restante_mois);
+        let coherent = d.duree_restante_mois == 0
+            || theorique <= 0.0
+            || ((d.mensualite - theorique).abs() / theorique <= h.ecart_mensualite_max);
+        if !coherent {
+            alertes.push(Alerte::attention(format!(
+                "Crédit « {} » : avec {} % sur {} mois pour {}, la mensualité devrait être d'environ {} et non {}. Vérifier la saisie (assurance emprunteur comprise ou non, différé…).",
+                d.libelle,
+                format!("{:.2}", d.taux_pct).replace('.', ","),
+                d.duree_restante_mois,
+                eur(d.restant_du),
+                eur(theorique),
+                eur(d.mensualite)
+            )));
+        }
+
+        let interets = credit::interets_restants(d.restant_du, taux, d.duree_restante_mois, d.mensualite);
+
+        // Arbitrage : trois zones, selon le taux face au rendement net attendu.
+        let (verdict, commentaire) = if taux > h.seuil_taux_dette {
+            du_prioritaire += d.restant_du;
+            alertes.push(Alerte::critique(format!(
+                "Crédit « {} » à {} % : rembourser en priorité avant d'investir, c'est un rendement garanti supérieur à tout placement raisonnable.",
+                d.libelle,
+                format!("{:.2}", d.taux_pct).replace('.', ",")
+            )));
+            (
+                VerdictCredit::Rembourser,
+                format!(
+                    "Taux au-dessus du seuil de {} : le remboursement anticipé rapporte plus, sans risque, que la poche 2.",
+                    pct(h.seuil_taux_dette)
+                ),
+            )
+        } else if taux > rendement_net {
+            alertes.push(Alerte::attention(format!(
+                "Crédit « {} » à {} % : au-dessus du rendement net attendu de la poche 2 ({}). Rembourser par anticipation est un placement sûr ; investir peut rapporter plus, mais sans garantie.",
+                d.libelle,
+                format!("{:.2}", d.taux_pct).replace('.', ","),
+                pct(rendement_net)
+            )));
+            (
+                VerdictCredit::Arbitrer,
+                format!(
+                    "Entre le rendement net attendu ({}) et le seuil de {} : arbitrage personnel entre sécurité et espérance de gain.",
+                    pct(rendement_net),
+                    pct(h.seuil_taux_dette)
+                ),
+            )
+        } else if d.objet.productif() {
+            (
+                VerdictCredit::Levier,
+                format!(
+                    "Crédit à {} sur un bien qui produit des loyers, en dessous du rendement net attendu ({}) : c'est un levier, le rembourser par anticipation appauvrirait le foyer.",
+                    pct(taux),
+                    pct(rendement_net)
+                ),
+            )
+        } else {
+            (
+                VerdictCredit::Conserver,
+                format!(
+                    "Taux inférieur au rendement net attendu de la poche 2 ({}) : garder le crédit et investir l'épargne.",
+                    pct(rendement_net)
+                ),
+            )
+        };
+
+        credits.push(AnalyseCredit {
+            libelle: d.libelle.clone(),
+            objet_libelle: d.objet.libelle().into(),
+            porte_par,
+            taux_pct: d.taux_pct,
+            restant_du_eur: d.restant_du,
+            mensualite_eur: d.mensualite,
+            duree_restante_mois: d.duree_restante_mois,
+            interets_restants_eur: interets,
+            mensualite_theorique_eur: theorique,
+            coherent,
+            verdict,
+            verdict_libelle: verdict.libelle().into(),
+            commentaire,
+        });
+    }
+
+    // Une mensualité qui se libère bientôt mérite d'être anticipée.
+    let bientot: Vec<&Dette> = q
+        .dettes_foyer()
+        .filter(|d| matches!(d.fin_mois(), Some(m) if m <= 24) && d.mensualite > 0.0)
+        .collect();
+    for d in &bientot {
+        alertes.push(Alerte::info(format!(
+            "Crédit « {} » soldé dans {} mois : {} par mois reviendront à l'épargne. Les affecter à la poche 2 dès maintenant évite qu'ils se diluent dans les dépenses.",
+            d.libelle,
+            d.duree_restante_mois,
+            eur(d.mensualite)
+        )));
+    }
+
+    if q.dettes.iter().any(|d| d.duree_restante_mois == 0 && d.mensualite > 0.0) {
+        alertes.push(Alerte::info(
+            "Certains crédits n'ont pas de durée renseignée : ils sont supposés courir sur toute la projection, ce qui sous-estime l'épargne future."
+                .to_string(),
+        ));
+    }
+
+    (credits, du_prioritaire, alertes)
 }
 
 fn budget(q: &Questionnaire, f: &Foyer) -> Budget {
@@ -190,18 +356,20 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
     let mut alertes: Vec<Alerte> = Vec::new();
 
     // ---------- Synthèse ----------
-    let f = q.foyer();
+    let f = q.foyer(h);
     let p_fin = q.p_fin();
-    let denom = p_fin + q.v_immo_loc;
+    let immo_net = q.immo_locatif_net(h);
+    let denom = p_fin + immo_net;
     let synthese = Synthese {
         nb_adultes: q.adultes.len() as u32,
         nb_enfants: q.enfants.len() as u32,
         age_reference: f.age,
         tol_risque_retenue: f.tol_risque,
         p_fin_eur: p_fin,
-        v_immo_loc_eur: q.v_immo_loc,
-        ratio_immo_locatif: if denom > 0.0 { q.v_immo_loc / denom } else { 0.0 },
-        taux_endettement: q.taux_endettement(),
+        v_immo_loc_eur: immo_net,
+        ratio_immo_locatif: if denom > 0.0 { immo_net / denom } else { 0.0 },
+        taux_endettement: q.taux_endettement(h),
+        taux_endettement_bancaire: q.taux_endettement_bancaire(h),
         tmi_pct: q.tmi.pct(),
     };
 
@@ -235,6 +403,19 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
             pct(synthese.taux_endettement),
             pct(h.endettement_max)
         )));
+    } else if synthese.taux_endettement_bancaire > h.endettement_max {
+        alertes.push(Alerte::attention(format!(
+            "Taux d'endettement de {} du foyer seul, mais {} en vue bancaire (crédits de SCI compris, loyers retenus à {}) : c'est ce second chiffre qu'une banque regardera pour un nouveau prêt.",
+            pct(synthese.taux_endettement),
+            pct(synthese.taux_endettement_bancaire),
+            pct(h.ponderation_loyers_bancaire)
+        )));
+    }
+    if f.effort_scis > 0.0 {
+        alertes.push(Alerte::attention(format!(
+            "Les SCI demandent un effort de {} par mois au foyer : leurs loyers ne couvrent pas leurs charges et leurs crédits. C'est autant d'épargne en moins.",
+            eur(f.effort_scis)
+        )));
     }
     if f.en_couple && f.tol_max >= f.tol_risque + 2 {
         let noms = |t: u8| {
@@ -267,17 +448,6 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
         )));
     }
 
-    // ---------- Dettes ----------
-    let dettes_cheres: Vec<&Dette> =
-        q.dettes.iter().filter(|d| d.taux_pct / 100.0 > h.seuil_taux_dette).collect();
-    for d in &dettes_cheres {
-        alertes.push(Alerte::critique(format!(
-            "Crédit « {} » à {} % : rembourser en priorité avant d'investir (rendement garanti).",
-            d.libelle,
-            format!("{:.2}", d.taux_pct).replace('.', ",")
-        )));
-    }
-
     // ---------- Poche 1 : études et projets ----------
     let p1: Vec<SousPoche> = poche1::sous_poches(q, h);
     for s in &p1 {
@@ -307,7 +477,52 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
     let cible = allocation_cible(q, h, &ctx, profil_score);
     let pp = h.profil(cible.profil);
 
-    let r_manquant = (q.r_cible - q.cf_immo - q.autres_revenus_passifs).max(0.0);
+    // ---------- Crédits : coût, cohérence et arbitrage ----------
+    // Le taux d'un crédit ne se juge pas dans l'absolu mais face au rendement que la
+    // poche 2 peut espérer, net de fiscalité : rembourser, c'est « gagner » le taux du
+    // crédit sans risque.
+    let rendement_net = pp.rendement * (1.0 - h.pfu);
+    let (credits, dettes_cheres, alertes_credits) = analyser_credits(q, h, rendement_net);
+    alertes.extend(alertes_credits);
+
+    // ---------- Ventes immobilières programmées ----------
+    let ventes: Vec<cession::Cession> = q.ventes.iter().map(|v| cession::cession(q, v, h)).collect();
+    for v in &ventes {
+        if v.produit_net_eur <= 0.0 {
+            alertes.push(Alerte::attention(format!(
+                "{} : la vente ne dégage aucun produit net une fois le crédit soldé et l'impôt payé.",
+                v.libelle
+            )));
+        }
+        if v.cash_flow_perdu_mensuel_eur > 0.0 {
+            alertes.push(Alerte::info(format!(
+                "{} : la vente fait perdre {} de revenu passif par mois, ce qui relève d'autant le capital à constituer.",
+                v.libelle,
+                eur(v.cash_flow_perdu_mensuel_eur)
+            )));
+        }
+        if v.amortissements_reintegres_eur > 0.0 {
+            alertes.push(Alerte::attention(format!(
+                "{} : {} d'amortissements déduits par la SCI sont réintégrés dans la plus-value, d'où un impôt de cession de {}.",
+                v.libelle,
+                eur(v.amortissements_reintegres_eur),
+                eur(v.impot_eur)
+            )));
+        }
+    }
+
+    // Le capital à constituer se juge sur le revenu passif qui restera à l'échéance :
+    // un bien vendu d'ici là ne rapporte plus de loyers.
+    let cf_immo_aujourdhui = q.cf_immo_total(h);
+    let cf_immo_a_terme = (cf_immo_aujourdhui
+        - ventes
+            .iter()
+            .filter(|v| v.dans_ans <= q.h_fire)
+            .map(|v| v.cash_flow_perdu_mensuel_eur)
+            .fold(0.0, |a, b| a + b))
+    .max(0.0);
+
+    let r_manquant = (q.r_cible - cf_immo_a_terme - q.autres_revenus_passifs).max(0.0);
     let taux_retrait = q.taux_retrait_pct / 100.0;
     let capital_cible = if taux_retrait > 0.0 { r_manquant * 12.0 / taux_retrait } else { 0.0 };
     if taux_retrait >= 0.04 {
@@ -319,20 +534,43 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
 
     let actuel_eur = allocation_actuelle_eur(q);
     let liquidites = q.avoirs.liquidites_a_investir + p0.excedent_eur;
-    // Capital financier : tout sauf le locatif direct (ses revenus sont déjà dans cf_immo).
-    let capital_fin = actuel_eur.total() - q.v_immo_loc + liquidites;
+    // Capital financier : tout sauf l'immobilier locatif (ses revenus sont déjà comptés
+    // dans le cash-flow immobilier).
+    let capital_fin = actuel_eur.total() - q.immo_locatif_net(h) + liquidites;
     let rendement = pp.rendement;
 
     let besoin_p2 = if q.h_fire == 0 { 0.0 } else { pmt(capital_cible, capital_fin, rendement, q.h_fire) };
     let flux_regime = (f.e_mois - besoin_projets).max(0.0);
     // `fold(0.0, …)` plutôt que `sum()` : la somme d'un itérateur vide de f64 vaut -0,0.
-    let du_cher: f64 = dettes_cheres.iter().map(|d| d.restant_du).fold(0.0, |a, b| a + b);
+    let du_cher = dettes_cheres;
+
+    // Épargne libérée au fil du temps : fin des crédits du foyer, fin de l'effort sur une
+    // SCI vendue, et mensualités que la vente d'un bien fait disparaître.
+    let mut liberations: Vec<(u32, f64)> = q
+        .dettes_foyer()
+        .filter_map(|d| d.fin_mois().map(|fin| (fin, d.mensualite)))
+        .collect();
+    let bilans = q.bilans_scis(h);
+    for v in &q.ventes {
+        if let BienVendu::Sci { id } = &v.bien {
+            if let Some(b) = bilans.iter().find(|b| &b.id == id) {
+                if b.effort_mensuel_eur > 0.0 {
+                    liberations.push((v.dans_ans * 12, b.effort_mensuel_eur * v.part_vendue()));
+                }
+            }
+        }
+    }
+    let apports: Vec<(u32, f64)> =
+        ventes.iter().map(|v| (v.dans_ans * 12, v.produit_net_eur.max(0.0))).collect();
+
     let sim = Simulation {
         capital: capital_fin,
         e_mois: f.e_mois,
         a_combler: p0.manque_eur + du_cher,
         poches: &p1,
         rendement,
+        liberations,
+        apports,
     };
     let mois_fire = q.h_fire * 12;
     let capital_simule = sim.capital_a(mois_fire);
@@ -669,6 +907,39 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
     priorite_enveloppes.push("CTO — or, ETF non éligibles".into());
     priorite_enveloppes.push("Plateformes de crowdfunding".into());
 
+    // ---------- Immobilier : SCI, ventes et crédits ----------
+    for b in &bilans {
+        for c in &b.commentaires {
+            alertes.push(Alerte::info(format!("{} : {}", b.nom, c)));
+        }
+        // Le choix du régime se juge à la TMI : à l'IR, les loyers s'ajoutent aux revenus
+        // du foyer et sont imposés au barème plus les prélèvements sociaux.
+        if b.regime == RegimeSci::Ir && q.tmi.haute() && b.resultat_imposable_eur > 0.0 {
+            alertes.push(Alerte::attention(format!(
+                "{} : SCI à l'IR avec une TMI de {} %, soit {} d'impôt et de prélèvements sociaux par an sur un résultat de {}. L'IS permettrait d'amortir le bien, au prix d'une plus-value plus lourde à la revente.",
+                b.nom,
+                q.tmi.pct(),
+                eur(b.impot_annuel_eur),
+                eur(b.resultat_imposable_eur)
+            )));
+        }
+    }
+
+    let immobilier = Immobilier {
+        locatif_direct_net_eur: q.v_immo_loc,
+        cash_flow_direct_mensuel_eur: q.cf_immo,
+        total_net_eur: immo_net,
+        cash_flow_total_mensuel_eur: cf_immo_aujourdhui,
+        effort_scis_mensuel_eur: f.effort_scis,
+        capitalise_scis_annuel_eur: bilans
+            .iter()
+            .map(|b| b.capitalise_annuel_eur)
+            .fold(0.0, |a, b| a + b),
+        scis: bilans,
+        ventes,
+        credits,
+    };
+
     // Tri des alertes : critique > attention > info.
     alertes.sort_by_key(|a| match a.gravite {
         Gravite::Critique => 0,
@@ -679,6 +950,7 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
     Resultat {
         synthese,
         budget,
+        immobilier,
         poche_0: p0,
         poche_1: p1,
         poche_2,
@@ -721,7 +993,7 @@ mod tests {
     #[test]
     fn flux_conserves() {
         let q = Questionnaire::exemple();
-        let e = q.foyer().e_mois;
+        let e = q.foyer(&Hypotheses::default()).e_mois;
         let r = calculer(&q, &Hypotheses::default());
         assert!(approx(somme_flux(&r), e, 1e-6));
         assert!(r.flux.remboursement_dettes_eur.is_sign_positive(), "pas de -0");
@@ -742,8 +1014,11 @@ mod tests {
         let b = &r.budget;
         assert_eq!(b.adultes.len(), 2);
         assert!(approx(b.total_revenus_eur, 5_800.0, 1e-9));
-        assert!(approx(b.capacite_calculee_eur, 2_080.0, 1e-9));
-        assert!(approx(b.epargne_retenue_eur, 2_080.0, 1e-9));
+        // 5 800 − 2 670 de dépenses − 1 050 de crédit − l'effort versé à la SCI.
+        let effort = r.immobilier.effort_scis_mensuel_eur;
+        assert!(effort > 0.0);
+        assert!(approx(b.capacite_calculee_eur, 2_080.0 - effort, 1e-9));
+        assert!(approx(b.epargne_retenue_eur, 2_080.0 - effort, 1e-9));
         assert_eq!(b.postes.len(), 9);
         assert!(approx(b.adultes.iter().map(|a| a.part).sum::<f64>(), 1.0, 1e-9));
         // Précaution sur dépenses + mensualités : 4 mois × 3 720 €.
@@ -776,7 +1051,7 @@ mod tests {
     fn precaution_prioritaire() {
         let mut q = Questionnaire::exemple();
         q.avoirs.livrets = 0.0;
-        let e = q.foyer().e_mois;
+        let e = q.foyer(&Hypotheses::default()).e_mois;
         let r = calculer(&q, &Hypotheses::default());
         assert!(approx(r.flux.precaution_eur, e, 1e-9));
         assert_eq!(r.flux.poche_2_eur, 0.0);
@@ -786,7 +1061,15 @@ mod tests {
     #[test]
     fn dette_chere_absorbe_le_flux() {
         let mut q = Questionnaire::exemple();
-        q.dettes.push(Dette { libelle: "Conso".into(), taux_pct: 7.0, restant_du: 500.0, mensualite: 100.0 });
+        q.dettes.push(Dette {
+            libelle: "Conso".into(),
+            taux_pct: 7.0,
+            restant_du: 500.0,
+            mensualite: 100.0,
+            duree_restante_mois: 6,
+            objet: ObjetCredit::Consommation,
+            sci_id: None,
+        });
         let r = calculer(&q, &Hypotheses::default());
         assert!(approx(r.flux.remboursement_dettes_eur, 500.0, 1e-9));
     }
@@ -857,11 +1140,232 @@ mod tests {
         q.depenses.clear();
         q.avoirs = Avoirs::default();
         q.v_immo_loc = 0.0;
-        let e = q.foyer().e_mois;
+        q.scis.clear();
+        q.ventes.clear();
+        let e = q.foyer(&Hypotheses::default()).e_mois;
         let r = calculer(&q, &Hypotheses::default());
         let somme: f64 = r.poche_2.lignes.iter().map(|l| l.flux_mensuel_eur).sum();
         assert!(approx(somme, e, 1e-6));
         let etf = r.poche_2.lignes.iter().find(|l| l.ligne == Ligne::EtfMonde).unwrap();
         assert!(approx(etf.flux_mensuel_eur, e * 0.45, 1e-6));
+    }
+
+    /// Un questionnaire sans SCI ni vente doit se comporter exactement comme avant.
+    fn q_simple() -> Questionnaire {
+        let mut q = Questionnaire::exemple();
+        q.scis.clear();
+        q.ventes.clear();
+        q.dettes.retain(|d| d.sci_id.is_none());
+        q
+    }
+
+    #[test]
+    fn la_fin_d_un_credit_libere_l_epargne() {
+        let h = Hypotheses::default();
+        let mut q = q_simple();
+        q.enfants.clear();
+        q.projets.clear();
+        q.h_fire = 20;
+
+        // Même crédit, avec puis sans durée renseignée.
+        q.dettes = vec![Dette {
+            libelle: "Crédit RP".into(),
+            taux_pct: 1.3,
+            restant_du: 100_000.0,
+            mensualite: 1_000.0,
+            duree_restante_mois: 0,
+            objet: ObjetCredit::ResidencePrincipale,
+            sci_id: None,
+        }];
+        let sans_duree = calculer(&q, &h).poche_2.capital_projete_eur;
+
+        q.dettes[0].duree_restante_mois = 60;
+        let r = calculer(&q, &h);
+        // La mensualité revient à l'épargne au bout de 5 ans : le capital projeté grimpe.
+        assert!(r.poche_2.capital_projete_eur > sans_duree, "{} vs {sans_duree}", r.poche_2.capital_projete_eur);
+        assert!(r.poche_2.flux_moyen_simule_eur > r.poche_2.flux_disponible_regime_eur);
+        // La capacité d'épargne d'aujourd'hui, elle, ne change pas.
+        assert!(approx(r.budget.capacite_calculee_eur, calculer(&q, &h).budget.capacite_calculee_eur, 1e-9));
+    }
+
+    #[test]
+    fn arbitrage_rembourser_ou_investir() {
+        let h = Hypotheses::default();
+        let mut q = q_simple();
+        let credit = |taux, objet| Dette {
+            libelle: "Crédit".into(),
+            taux_pct: taux,
+            restant_du: 20_000.0,
+            mensualite: 300.0,
+            duree_restante_mois: 84,
+            objet,
+            sci_id: None,
+        };
+
+        // Taux très élevé : remboursement prioritaire, et le flux y est effectivement affecté.
+        q.dettes = vec![credit(9.0, ObjetCredit::Consommation)];
+        let r = calculer(&q, &h);
+        assert_eq!(r.immobilier.credits[0].verdict, VerdictCredit::Rembourser);
+        assert!(r.flux.remboursement_dettes_eur > 0.0);
+
+        // Taux intermédiaire : arbitrage signalé, mais le flux n'est pas préempté.
+        q.dettes = vec![credit(4.5, ObjetCredit::Consommation)];
+        let r = calculer(&q, &h);
+        assert_eq!(r.immobilier.credits[0].verdict, VerdictCredit::Arbitrer);
+        assert_eq!(r.flux.remboursement_dettes_eur, 0.0);
+
+        // Taux bas sur un bien qui rapporte : c'est du levier, on conserve.
+        q.dettes = vec![credit(1.5, ObjetCredit::Locatif)];
+        let r = calculer(&q, &h);
+        assert_eq!(r.immobilier.credits[0].verdict, VerdictCredit::Levier);
+
+        // Même taux bas, mais sans bien productif derrière.
+        q.dettes = vec![credit(1.5, ObjetCredit::ResidencePrincipale)];
+        let r = calculer(&q, &h);
+        assert_eq!(r.immobilier.credits[0].verdict, VerdictCredit::Conserver);
+    }
+
+    #[test]
+    fn mensualite_incoherente_signalee() {
+        let h = Hypotheses::default();
+        let mut q = q_simple();
+        q.dettes = vec![Dette {
+            libelle: "Crédit".into(),
+            taux_pct: 3.0,
+            restant_du: 100_000.0,
+            mensualite: 300.0, // très loin des ~1 380 € attendus sur 84 mois
+            duree_restante_mois: 84,
+            objet: ObjetCredit::Autre,
+            sci_id: None,
+        }];
+        let r = calculer(&q, &h);
+        let c = &r.immobilier.credits[0];
+        assert!(!c.coherent);
+        assert!(c.mensualite_theorique_eur > 1_300.0);
+        assert!(r.alertes.iter().any(|a| a.message.contains("la mensualité devrait être")));
+
+        // Mensualité cohérente : plus d'alerte, et des intérêts positifs.
+        q.dettes[0].mensualite = c.mensualite_theorique_eur;
+        let r = calculer(&q, &h);
+        assert!(r.immobilier.credits[0].coherent);
+        assert!(r.immobilier.credits[0].interets_restants_eur > 0.0);
+    }
+
+    #[test]
+    fn credit_de_sci_hors_capacite_mais_dans_la_vue_bancaire() {
+        let h = Hypotheses::default();
+        let q = Questionnaire::exemple();
+        let r = calculer(&q, &h);
+        // La mensualité de la SCI ne pèse pas sur la capacité d'épargne du foyer…
+        assert!(approx(r.budget.mensualites_credits_eur, 1_050.0, 1e-9));
+        // … mais elle compte dans la vue bancaire, plus élevée que le taux du foyer seul.
+        assert!(r.synthese.taux_endettement_bancaire > r.synthese.taux_endettement);
+        assert_eq!(r.immobilier.credits.len(), 2);
+        assert!(r.immobilier.credits.iter().any(|c| c.porte_par == "SCI du Moulin"));
+    }
+
+    #[test]
+    fn sci_a_l_is_ne_produit_pas_de_revenu_passif_sans_distribution() {
+        let h = Hypotheses::default();
+        let mut q = q_simple();
+        q.cf_immo = 0.0;
+        q.v_immo_loc = 0.0;
+        q.scis = vec![Sci {
+            id: "s".into(),
+            nom: "SCI".into(),
+            regime: RegimeSci::Is,
+            part_foyer_pct: 100.0,
+            valeur_biens: 200_000.0,
+            scpi: 0.0,
+            loyers_mensuels: 1_400.0,
+            charges_mensuelles: 200.0,
+            distribution_pct: 0.0,
+        }];
+        let sans = calculer(&q, &h);
+        assert_eq!(sans.immobilier.cash_flow_total_mensuel_eur, 0.0);
+        assert!(sans.immobilier.capitalise_scis_annuel_eur > 0.0);
+
+        // En distribuant, le foyer touche enfin un revenu passif : le capital à constituer baisse.
+        q.scis[0].distribution_pct = 100.0;
+        let avec = calculer(&q, &h);
+        assert!(avec.immobilier.cash_flow_total_mensuel_eur > 0.0);
+        assert!(avec.poche_2.capital_cible_eur < sans.poche_2.capital_cible_eur);
+    }
+
+    #[test]
+    fn vente_verse_son_produit_et_supprime_les_loyers() {
+        let h = Hypotheses::default();
+        let mut q = q_simple();
+        q.enfants.clear();
+        q.projets.clear();
+        q.h_fire = 10;
+        q.cf_immo = 400.0;
+        q.v_immo_loc = 150_000.0;
+
+        let sans_vente = calculer(&q, &h);
+        q.ventes = vec![VenteImmobiliere {
+            libelle: "Vente de l'appartement".into(),
+            bien: BienVendu::LocatifDirect,
+            dans_ans: 3,
+            part_vendue_pct: 100.0,
+            prix_vente: 150_000.0,
+            prix_acquisition: 150_000.0,
+            detention_ans: 25,
+            frais_vente_pct: 0.0,
+        }];
+        let avec_vente = calculer(&q, &h);
+
+        let c = &avec_vente.immobilier.ventes[0];
+        assert!(c.produit_net_eur > 140_000.0);
+        // Vendu 3 ans plus tard, le bien s'est revalorisé : il reste une petite plus-value.
+        // À 28 ans de détention, l'impôt est éteint (22 ans) mais pas encore les
+        // prélèvements sociaux (30 ans), d'où un reliquat modeste.
+        assert!(c.impot_eur > 0.0 && c.impot_eur < 500.0, "{}", c.impot_eur);
+        assert!((c.cash_flow_perdu_mensuel_eur - 400.0).abs() < 1e-9);
+        // Le produit entre dans la poche 2 : le capital projeté augmente nettement…
+        assert!(avec_vente.poche_2.capital_projete_eur > sans_vente.poche_2.capital_projete_eur + 100_000.0);
+        // … mais les loyers perdus relèvent le capital à constituer.
+        assert!(avec_vente.poche_2.capital_cible_eur > sans_vente.poche_2.capital_cible_eur);
+    }
+
+    #[test]
+    fn vendre_une_sci_a_l_is_coute_les_amortissements() {
+        let h = Hypotheses::default();
+        let mut q = q_simple();
+        let sci = |regime| Sci {
+            id: "s".into(),
+            nom: "SCI".into(),
+            regime,
+            part_foyer_pct: 100.0,
+            valeur_biens: 300_000.0,
+            scpi: 0.0,
+            loyers_mensuels: 1_200.0,
+            charges_mensuelles: 200.0,
+            distribution_pct: 0.0,
+        };
+        q.ventes = vec![VenteImmobiliere {
+            libelle: "Vente SCI".into(),
+            bien: BienVendu::Sci { id: "s".into() },
+            dans_ans: 0,
+            part_vendue_pct: 100.0,
+            prix_vente: 300_000.0,
+            prix_acquisition: 300_000.0,
+            detention_ans: 12,
+            frais_vente_pct: 0.0,
+        }];
+
+        // Vendue au prix d'achat : rien à payer pour une SCI à l'IR…
+        q.scis = vec![sci(RegimeSci::Ir)];
+        let ir = calculer(&q, &h);
+        assert_eq!(ir.immobilier.ventes[0].impot_eur, 0.0);
+
+        // … alors qu'à l'IS les 12 ans d'amortissements sont réintégrés et imposés.
+        q.scis = vec![sci(RegimeSci::Is)];
+        let is = calculer(&q, &h);
+        let v = &is.immobilier.ventes[0];
+        assert!((v.amortissements_reintegres_eur - 102_000.0).abs() < 1.0);
+        assert!(v.impot_eur > 15_000.0);
+        assert!(v.produit_net_eur < ir.immobilier.ventes[0].produit_net_eur);
+        assert!(is.alertes.iter().any(|a| a.message.contains("réintégrés")));
     }
 }

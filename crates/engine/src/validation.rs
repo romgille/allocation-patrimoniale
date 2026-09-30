@@ -105,6 +105,65 @@ pub fn valider(q: &Questionnaire, h: &Hypotheses) -> Result<(), Vec<String>> {
         }
         montant(&mut e, &format!("Crédit « {} » : le restant dû", d.libelle), d.restant_du);
         montant(&mut e, &format!("Crédit « {} » : la mensualité", d.libelle), d.mensualite);
+        if d.duree_restante_mois > 600 {
+            e.push(format!("Crédit « {} » : durée restante ≤ 600 mois (50 ans).", d.libelle));
+        }
+        if let Some(id) = &d.sci_id {
+            if !q.scis.iter().any(|s| &s.id == id) {
+                e.push(format!("Crédit « {} » : la SCI rattachée n'existe pas.", d.libelle));
+            }
+        }
+    }
+
+    // --- SCI ---
+    if q.scis.len() > 10 {
+        e.push("10 SCI maximum.".into());
+    }
+    for (i, s) in q.scis.iter().enumerate() {
+        let n = if s.nom.trim().is_empty() { format!("SCI {}", i + 1) } else { s.nom.clone() };
+        if s.id.trim().is_empty() {
+            e.push(format!("{n} : identifiant manquant."));
+        }
+        if q.scis.iter().filter(|a| a.id == s.id).count() > 1 {
+            e.push(format!("{n} : deux SCI portent le même identifiant."));
+        }
+        if !(0.0..=100.0).contains(&s.part_foyer_pct) {
+            e.push(format!("{n} : la quote-part du foyer doit être entre 0 et 100 %."));
+        }
+        if !(0.0..=100.0).contains(&s.distribution_pct) {
+            e.push(format!("{n} : la part distribuée doit être entre 0 et 100 %."));
+        }
+        montant(&mut e, &format!("{n} : la valeur des biens"), s.valeur_biens);
+        montant(&mut e, &format!("{n} : les SCPI"), s.scpi);
+        montant(&mut e, &format!("{n} : les loyers"), s.loyers_mensuels);
+        montant(&mut e, &format!("{n} : les charges"), s.charges_mensuelles);
+    }
+
+    // --- Ventes immobilières ---
+    for (i, v) in q.ventes.iter().enumerate() {
+        let n = if v.libelle.trim().is_empty() { format!("Vente {}", i + 1) } else { v.libelle.clone() };
+        if v.dans_ans > 40 {
+            e.push(format!("{n} : échéance ≤ 40 ans."));
+        }
+        if !(0.0..=100.0).contains(&v.part_vendue_pct) {
+            e.push(format!("{n} : la part vendue doit être entre 0 et 100 %."));
+        }
+        if !(0.0..=20.0).contains(&v.frais_vente_pct) {
+            e.push(format!("{n} : les frais de vente doivent être entre 0 et 20 %."));
+        }
+        if v.detention_ans > 80 {
+            e.push(format!("{n} : durée de détention ≤ 80 ans."));
+        }
+        montant(&mut e, &format!("{n} : le prix de vente"), v.prix_vente);
+        montant(&mut e, &format!("{n} : le prix d'acquisition"), v.prix_acquisition);
+        if let crate::model::BienVendu::Sci { id } = &v.bien {
+            if !q.scis.iter().any(|s| &s.id == id) {
+                e.push(format!("{n} : la SCI vendue n'existe pas."));
+            }
+        }
+        if q.ventes.iter().filter(|a| a.bien == v.bien).count() > 1 {
+            e.push(format!("{n} : ce bien fait l'objet de plusieurs ventes."));
+        }
     }
 
     // --- Hypothèses ---

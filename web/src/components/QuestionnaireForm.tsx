@@ -3,10 +3,11 @@ import type { Contraintes } from '../bindings/Contraintes'
 import type { Questionnaire } from '../bindings/Questionnaire'
 import { BudgetForm } from './BudgetForm'
 import { FoyerForm } from './FoyerForm'
+import { ImmobilierForm } from './ImmobilierForm'
 import { NumberField, Toggle } from './fields'
 import { ProjetsForm } from './ProjetsForm'
 
-export type Etape = 'foyer' | 'budget' | 'projets' | 'objectifs' | 'patrimoine' | 'preferences'
+export type Etape = 'foyer' | 'budget' | 'projets' | 'objectifs' | 'patrimoine' | 'immobilier' | 'preferences'
 
 export const ETAPES: { id: Etape; titre: string }[] = [
   { id: 'foyer', titre: 'Foyer' },
@@ -14,6 +15,7 @@ export const ETAPES: { id: Etape; titre: string }[] = [
   { id: 'projets', titre: 'Enfants & projets' },
   { id: 'objectifs', titre: 'Revenus passifs' },
   { id: 'patrimoine', titre: 'Patrimoine' },
+  { id: 'immobilier', titre: 'Immobilier & SCI' },
   { id: 'preferences', titre: 'Préférences' },
 ]
 
@@ -107,26 +109,14 @@ export function QuestionnaireForm({ etape, q, onChange }: Props) {
             <NumberField label="Crypto" unite="€" value={q.avoirs.crypto} onChange={(v) => setAvoir('crypto', v)} min={0} />
             <NumberField label="Private equity" unite="€" value={q.avoirs.private_equity} onChange={(v) => setAvoir('private_equity', v)} min={0} />
           </section>
-          <h3>Immobilier locatif</h3>
-          <section className="grille">
-            <NumberField
-              label="Valeur nette du locatif"
-              unite="€"
-              value={q.v_immo_loc}
-              onChange={(v) => set('v_immo_loc', v)}
-              min={0}
-              aide="Valeur du bien − capital restant dû. Hors résidence principale."
-            />
-            <NumberField
-              label="Cash-flow net mensuel"
-              unite="€/mois"
-              value={q.cf_immo}
-              onChange={(v) => set('cf_immo', v)}
-              aide="Après crédit, charges et impôts. Peut être négatif."
-            />
-          </section>
+          <p className="aide">
+            L'immobilier locatif, les SCI et les ventes programmées se saisissent à l'étape suivante.
+          </p>
         </>
       )
+
+    case 'immobilier':
+      return <ImmobilierForm q={q} onChange={onChange} />
 
     case 'preferences':
       return (

@@ -1,5 +1,7 @@
 import type { Alerte } from '../bindings/Alerte'
+import type { AnalyseCredit } from '../bindings/AnalyseCredit'
 import type { Budget } from '../bindings/Budget'
+import type { Immobilier as ImmobilierBloc } from '../bindings/Immobilier'
 import type { Priorite } from '../bindings/Priorite'
 import type { Resultat } from '../bindings/Resultat'
 import { eur, num, pct, pts } from '../format'
@@ -110,6 +112,172 @@ function Tuile({ titre, valeur, detail, ton }: { titre: string; valeur: string; 
   )
 }
 
+const VERDICTS: Record<AnalyseCredit['verdict'], 'ko' | 'attention' | 'ok'> = {
+  rembourser: 'ko',
+  arbitrer: 'attention',
+  conserver: 'ok',
+  levier: 'ok',
+}
+
+/** Immobilier : ce que chaque SCI rapporte vraiment, les ventes prévues et les crédits. */
+function Immobilier({ immo }: { immo: ImmobilierBloc }) {
+  if (immo.scis.length === 0 && immo.ventes.length === 0 && immo.credits.length === 0) return null
+  return (
+    <section className="bloc">
+      <h2>Immobilier et crédits</h2>
+
+      {immo.scis.length > 0 && (
+        <>
+          <h3>SCI</h3>
+          <div className="defilement">
+            <table className="tableau compact">
+              <thead>
+                <tr>
+                  <th scope="col">SCI</th>
+                  <th scope="col">Régime</th>
+                  <th scope="col" className="num">Valeur nette</th>
+                  <th scope="col" className="num">Résultat imposable</th>
+                  <th scope="col" className="num">Impôt / an</th>
+                  <th scope="col" className="num">Perçu par le foyer</th>
+                </tr>
+              </thead>
+              <tbody>
+                {immo.scis.map((s) => (
+                  <tr key={s.id}>
+                    <th scope="row">
+                      {s.nom}
+                      {s.part_foyer < 1 && <span className="muet"> · {pct(s.part_foyer, 0)}</span>}
+                    </th>
+                    <td>{s.regime === 'is' ? 'IS' : 'IR'}</td>
+                    <td className="num">{eur(s.valeur_nette_eur)}</td>
+                    <td className="num">{eur(s.resultat_imposable_eur)}</td>
+                    <td className="num">{eur(s.impot_annuel_eur)}</td>
+                    <td className={`num ${s.cash_flow_foyer_mensuel_eur < 0 ? 'ko' : ''}`}>
+                      {eur(s.cash_flow_foyer_mensuel_eur)}/mois
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {immo.capitalise_scis_annuel_eur > 0 && (
+            <p className="aide">
+              {eur(immo.capitalise_scis_annuel_eur)} par an restent capitalisés dans vos SCI à l'IS : cela fait grossir
+              votre patrimoine, mais ne compte pas dans le revenu passif tant que rien n'est distribué.
+            </p>
+          )}
+          {immo.effort_scis_mensuel_eur > 0 && (
+            <p className="ko">
+              Vos SCI demandent {eur(immo.effort_scis_mensuel_eur)} par mois au foyer : leurs loyers ne couvrent ni
+              leurs charges ni leurs crédits.
+            </p>
+          )}
+        </>
+      )}
+
+      {immo.ventes.length > 0 && (
+        <>
+          <h3>Ventes programmées</h3>
+          <div className="defilement">
+            <table className="tableau compact">
+              <thead>
+                <tr>
+                  <th scope="col">Vente</th>
+                  <th scope="col" className="num">Échéance</th>
+                  <th scope="col" className="num">Prix</th>
+                  <th scope="col" className="num">Crédit soldé</th>
+                  <th scope="col" className="num">Plus-value</th>
+                  <th scope="col" className="num">Impôt</th>
+                  <th scope="col" className="num">Produit net</th>
+                </tr>
+              </thead>
+              <tbody>
+                {immo.ventes.map((v, i) => (
+                  <tr key={i}>
+                    <th scope="row">
+                      {v.libelle} <span className="muet">· {v.bien_libelle}</span>
+                    </th>
+                    <td className="num">dans {v.dans_ans} ans</td>
+                    <td className="num">{eur(v.prix_vente_eur)}</td>
+                    <td className="num">{eur(v.credit_solde_eur)}</td>
+                    <td className="num">{eur(v.plus_value_brute_eur)}</td>
+                    <td className="num">{eur(v.impot_eur)}</td>
+                    <td className="num">
+                      <strong>{eur(v.produit_net_eur)}</strong>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ul className="puces">
+            {immo.ventes.flatMap((v, i) => v.commentaires.map((c, j) => <li key={`${i}-${j}`}>{c}</li>))}
+          </ul>
+        </>
+      )}
+
+      {immo.credits.length > 0 && (
+        <>
+          <h3>Crédits</h3>
+          <div className="defilement">
+            <table className="tableau compact">
+              <thead>
+                <tr>
+                  <th scope="col">Crédit</th>
+                  <th scope="col">Porté par</th>
+                  <th scope="col" className="num">Taux</th>
+                  <th scope="col" className="num">Restant dû</th>
+                  <th scope="col" className="num">Fin</th>
+                  <th scope="col" className="num">Intérêts restants</th>
+                  <th scope="col">Arbitrage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {immo.credits.map((c, i) => (
+                  <tr key={i}>
+                    <th scope="row">
+                      {c.libelle} <span className="muet">· {c.objet_libelle}</span>
+                    </th>
+                    <td>{c.porte_par}</td>
+                    <td className="num">{num(c.taux_pct)} %</td>
+                    <td className="num">{eur(c.restant_du_eur)}</td>
+                    <td className="num">
+                      {c.duree_restante_mois > 0 ? (
+                        `${Math.round(c.duree_restante_mois / 12)} ans`
+                      ) : (
+                        <span className="muet">non renseignée</span>
+                      )}
+                    </td>
+                    <td className="num">
+                      {c.duree_restante_mois > 0 ? eur(c.interets_restants_eur) : <span className="muet">—</span>}
+                      {!c.coherent && (
+                        <span className="muet" title={`Mensualité théorique : ${eur(c.mensualite_theorique_eur)}`}>
+                          {' '}
+                          ⚠️
+                        </span>
+                      )}
+                    </td>
+                    <td className={VERDICTS[c.verdict]} title={c.commentaire}>
+                      {c.verdict_libelle}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ul className="puces">
+            {immo.credits.map((c, i) => (
+              <li key={i}>
+                <strong>{c.libelle}</strong> — {c.commentaire}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  )
+}
+
 export function Resultats({ r }: { r: Resultat }) {
   const p2 = r.poche_2
   const segments: SegmentFlux[] = [
@@ -144,9 +312,21 @@ export function Resultats({ r }: { r: Resultat }) {
           valeur={eur(r.synthese.p_fin_eur)}
           detail={`+ ${eur(r.synthese.v_immo_loc_eur)} de locatif net (${pct(r.synthese.ratio_immo_locatif, 0)})`}
         />
+        <Tuile
+          titre="Taux d'endettement"
+          valeur={pct(r.synthese.taux_endettement, 0)}
+          detail={
+            Math.abs(r.synthese.taux_endettement_bancaire - r.synthese.taux_endettement) > 0.005
+              ? `${pct(r.synthese.taux_endettement_bancaire, 0)} en vue bancaire (crédits de SCI compris, loyers pondérés)`
+              : 'Mensualités du foyer rapportées à ses revenus'
+          }
+          ton={r.synthese.taux_endettement_bancaire > 0.35 ? 'ko' : undefined}
+        />
       </div>
 
       <BudgetFoyer b={r.budget} />
+
+      <Immobilier immo={r.immobilier} />
 
       <section className="bloc">
         <h2>Alertes et priorités</h2>

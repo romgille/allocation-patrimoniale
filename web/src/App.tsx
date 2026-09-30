@@ -42,6 +42,8 @@ function questionnaireVierge(): Questionnaire {
     },
     v_immo_loc: 0,
     cf_immo: 0,
+    scis: [],
+    ventes: [],
     dettes: [],
     contraintes: { esg: false, refus_crypto: false, refus_immo_direct: false, crypto_souhaitee_pct: 0 },
   }
