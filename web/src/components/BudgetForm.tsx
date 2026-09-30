@@ -151,7 +151,7 @@ export function BudgetForm({ q, onChange }: Props) {
         <strong>{eur(depenses)}</strong>
         <span>− Mensualités de crédit du foyer</span>
         <strong>{eur(mensualites)}</strong>
-        <span className="total">= Capacité d'épargne</span>
+        <span className="total">= Capacité d'épargne avant effort SCI</span>
         <strong className={`total ${capacite < 0 ? 'ko' : ''}`}>{eur(capacite)}</strong>
       </div>
       {mensualitesScis > 0 && (

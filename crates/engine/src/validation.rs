@@ -134,6 +134,7 @@ pub fn valider(q: &Questionnaire, h: &Hypotheses) -> Result<(), Vec<String>> {
             e.push(format!("{n} : la part distribuée doit être entre 0 et 100 %."));
         }
         montant(&mut e, &format!("{n} : la valeur des biens"), s.valeur_biens);
+        montant(&mut e, &format!("{n} : la base d'amortissement"), s.base_amortissement);
         montant(&mut e, &format!("{n} : les SCPI"), s.scpi);
         montant(&mut e, &format!("{n} : les loyers"), s.loyers_mensuels);
         montant(&mut e, &format!("{n} : les charges"), s.charges_mensuelles);
@@ -190,8 +191,16 @@ pub fn valider(q: &Questionnaire, h: &Hypotheses) -> Result<(), Vec<String>> {
         ("PFU", h.pfu),
         ("Prélèvements sociaux", h.prelevements_sociaux),
         ("Plafond PER", h.plafond_per_revenus),
+        ("Part amortissable", h.part_amortissable),
+        ("Taux IS réduit", h.is_taux_reduit),
+        ("Taux IS normal", h.is_taux_normal),
+        ("Pondération des loyers bancaires", h.ponderation_loyers_bancaire),
     ] {
         fraction(&mut e, nom, v);
+    }
+    montant(&mut e, "Seuil de bénéfice du taux IS réduit", h.is_seuil_taux_reduit);
+    if h.duree_amortissement_ans == 0 {
+        e.push("La durée d'amortissement doit être positive.".into());
     }
     if h.or_min > h.or_max {
         e.push("Or min doit être ≤ or max.".into());

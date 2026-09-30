@@ -171,6 +171,7 @@ impl Simulation<'_> {
         for m in 0..mois {
             k = k * (1.0 + i) + self.flux_poche2(m, &mut a_combler) + self.apport_a(m);
         }
+        k += self.apport_a(mois);
         k
     }
 
@@ -225,7 +226,9 @@ fn analyser_credits(
 
         // Arbitrage : trois zones, selon le taux face au rendement net attendu.
         let (verdict, commentaire) = if taux > h.seuil_taux_dette {
-            du_prioritaire += d.restant_du;
+            if d.sci_id.is_none() {
+                du_prioritaire += d.restant_du;
+            }
             alertes.push(Alerte::critique(format!(
                 "Crédit « {} » à {} % : rembourser en priorité avant d'investir, c'est un rendement garanti supérieur à tout placement raisonnable.",
                 d.libelle,
@@ -536,7 +539,7 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
     let liquidites = q.avoirs.liquidites_a_investir + p0.excedent_eur;
     // Capital financier : tout sauf l'immobilier locatif (ses revenus sont déjà comptés
     // dans le cash-flow immobilier).
-    let capital_fin = actuel_eur.total() - q.immo_locatif_net(h) + liquidites;
+    let capital_fin = actuel_eur.total() - q.v_immo_loc + liquidites;
     let rendement = pp.rendement;
 
     let besoin_p2 = if q.h_fire == 0 { 0.0 } else { pmt(capital_cible, capital_fin, rendement, q.h_fire) };
@@ -551,17 +554,25 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
         .filter_map(|d| d.fin_mois().map(|fin| (fin, d.mensualite)))
         .collect();
     let bilans = q.bilans_scis(h);
-    for v in &q.ventes {
+    for (v, c) in q.ventes.iter().zip(ventes.iter()) {
+        liberations.push((v.dans_ans * 12, c.mensualites_liberees_eur));
         if let BienVendu::Sci { id } = &v.bien {
             if let Some(b) = bilans.iter().find(|b| &b.id == id) {
-                if b.effort_mensuel_eur > 0.0 {
-                    liberations.push((v.dans_ans * 12, b.effort_mensuel_eur * v.part_vendue()));
+                let mut effort = b.effort_mensuel_eur * v.part_vendue();
+                for d in q.dettes.iter().filter(|d| d.sci_id.as_deref() == Some(id)) {
+                    if let Some(fin) = d.fin_mois() {
+                        let liberee = effort.min(d.mensualite * v.part_vendue());
+                        if liberee > 0.0 {
+                            liberations.push((fin, liberee));
+                            effort -= liberee;
+                        }
+                    }
                 }
             }
         }
     }
     let apports: Vec<(u32, f64)> =
-        ventes.iter().map(|v| (v.dans_ans * 12, v.produit_net_eur.max(0.0))).collect();
+        ventes.iter().map(|v| (v.dans_ans * 12, v.produit_net_eur)).collect();
 
     let sim = Simulation {
         capital: capital_fin,
@@ -1276,6 +1287,7 @@ mod tests {
             regime: RegimeSci::Is,
             part_foyer_pct: 100.0,
             valeur_biens: 200_000.0,
+            base_amortissement: 200_000.0,
             scpi: 0.0,
             loyers_mensuels: 1_400.0,
             charges_mensuelles: 200.0,
@@ -1338,6 +1350,7 @@ mod tests {
             regime,
             part_foyer_pct: 100.0,
             valeur_biens: 300_000.0,
+            base_amortissement: 300_000.0,
             scpi: 0.0,
             loyers_mensuels: 1_200.0,
             charges_mensuelles: 200.0,

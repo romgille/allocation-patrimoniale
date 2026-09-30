@@ -88,7 +88,7 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
     // (le terrain ne s'amortit pas). Les SCPI ne sont pas amorties ici.
     let amortissement = match sci.regime {
         RegimeSci::Is if h.duree_amortissement_ans > 0 => {
-            sci.valeur_biens * h.part_amortissable / h.duree_amortissement_ans as f64
+            sci.base_amortissement * h.part_amortissable / h.duree_amortissement_ans as f64
         }
         _ => 0.0,
     };
@@ -130,7 +130,8 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
     let (cash_flow_foyer, capitalise) = match sci.regime {
         RegimeSci::Ir => ((tresorerie * part - impot_foyer).max(f64::MIN), 0.0),
         RegimeSci::Is => {
-            let distribuable = tresorerie.max(0.0);
+            let resultat_comptable_apres_is = (loyers - charges - interets - impot_societe).max(0.0);
+            let distribuable = resultat_comptable_apres_is.min(tresorerie.max(0.0));
             let distribue = distribuable * (sci.distribution_pct / 100.0).clamp(0.0, 1.0);
             let net = distribue * part * (1.0 - h.pfu);
             if distribue < distribuable - 0.5 {
@@ -186,6 +187,7 @@ mod tests {
             regime,
             part_foyer_pct: 100.0,
             valeur_biens: 300_000.0,
+            base_amortissement: 300_000.0,
             scpi: 0.0,
             loyers_mensuels: 1_500.0,
             charges_mensuelles: 300.0,

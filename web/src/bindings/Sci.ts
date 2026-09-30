@@ -19,6 +19,10 @@ part_foyer_pct: number,
  */
 valeur_biens: number, 
 /**
+ * Base d'acquisition amortissable des biens (distincte de leur valeur vénale).
+ */
+base_amortissement: number,
+/**
  * Parts de SCPI détenues par la SCI.
  */
 scpi: number, loyers_mensuels: number, 

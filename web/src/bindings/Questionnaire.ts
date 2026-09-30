@@ -33,6 +33,10 @@ v_immo_loc: number,
  */
 cf_immo: number, 
 /**
+ * Loyers mensuels bruts du locatif direct, utilisés pour le ratio bancaire.
+ */
+loyers_immo_loc_mensuels: number,
+/**
  * Sociétés civiles immobilières du foyer.
  */
 scis: Array<Sci>, 

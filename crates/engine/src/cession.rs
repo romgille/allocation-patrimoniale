@@ -139,19 +139,17 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
         BienVendu::Sci { id } => q.scis.iter().find(|s| &s.id == id),
         BienVendu::LocatifDirect => None,
     };
-    let quote_part = sci.map(|s| s.part_foyer()).unwrap_or(1.0);
     let mut commentaires = Vec::new();
 
     let is = sci.map(|s| s.regime) == Some(RegimeSci::Is);
     let (base, amortissements, abattement, impot, regime) = if is {
         // Valeur nette comptable : le prix d'acquisition moins tout ce qui a été amorti.
-        let s = sci.expect("SCI présente");
         let amort_annuel = if h.duree_amortissement_ans > 0 {
-            s.valeur_biens * h.part_amortissable / h.duree_amortissement_ans as f64
+            acquisition * h.part_amortissable / h.duree_amortissement_ans as f64
         } else {
             0.0
         };
-        let cumul = (amort_annuel * annees as f64).min(s.valeur_biens * h.part_amortissable) * part;
+        let cumul = (amort_annuel * annees as f64).min(acquisition * h.part_amortissable);
         let vnc = (acquisition - cumul).max(0.0);
         let pv = (prix - frais - vnc).max(0.0);
         let impot = impot_societes(pv, h);
@@ -188,7 +186,11 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
     // À l'IR comme en direct, l'impôt est dû par les associés au prorata ; à l'IS il est
     // payé par la société avant que le solde ne remonte au foyer.
     let produit_societe = prix - frais - credit_solde - if is { impot } else { 0.0 };
-    let produit_net = produit_societe * quote_part - if is { 0.0 } else { impot * quote_part };
+    let produit_net = if is {
+        produit_societe * (1.0 - h.pfu)
+    } else {
+        produit_societe - impot
+    };
 
     let cash_flow_perdu = match &v.bien {
         BienVendu::LocatifDirect => q.cf_immo.max(0.0) * part,
@@ -223,11 +225,11 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
         plus_value_brute_eur: base,
         amortissements_reintegres_eur: amortissements,
         abattement_eur: abattement,
-        impot_eur: impot * if is { 1.0 } else { quote_part },
+        impot_eur: impot,
         regime_libelle: regime.into(),
         produit_net_eur: produit_net,
         cash_flow_perdu_mensuel_eur: cash_flow_perdu,
-        mensualites_liberees_eur: mensualites_liberees * quote_part,
+        mensualites_liberees_eur: mensualites_liberees,
         commentaires,
     }
 }
@@ -317,6 +319,7 @@ mod tests {
             regime: RegimeSci::Is,
             part_foyer_pct: 100.0,
             valeur_biens: 300_000.0,
+            base_amortissement: 300_000.0,
             scpi: 0.0,
             loyers_mensuels: 1_200.0,
             charges_mensuelles: 200.0,

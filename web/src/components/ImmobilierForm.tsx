@@ -67,6 +67,14 @@ export function ImmobilierForm({ q, onChange }: Props) {
           onChange={(v) => set('cf_immo', v)}
           aide="Après crédit, charges et impôts. Peut être négatif."
         />
+        <NumberField
+          label="Loyers bruts mensuels"
+          unite="€/mois"
+          value={q.loyers_immo_loc_mensuels}
+          onChange={(v) => set('loyers_immo_loc_mensuels', v)}
+          min={0}
+          aide="Loyers avant crédit, charges et impôts, retenus par la banque."
+        />
       </section>
 
       <h3>SCI</h3>
@@ -152,6 +160,7 @@ export function ImmobilierForm({ q, onChange }: Props) {
               regime: 'is',
               part_foyer_pct: 100,
               valeur_biens: 0,
+              base_amortissement: 0,
               scpi: 0,
               loyers_mensuels: 0,
               charges_mensuelles: 0,

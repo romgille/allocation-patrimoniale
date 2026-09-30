@@ -295,6 +295,8 @@ pub struct Sci {
     pub part_foyer_pct: f64,
     /// Valeur vénale des biens détenus par la SCI.
     pub valeur_biens: f64,
+    /// Base d'acquisition amortissable des biens (distincte de leur valeur vénale).
+    pub base_amortissement: f64,
     /// Parts de SCPI détenues par la SCI.
     pub scpi: f64,
     pub loyers_mensuels: f64,
@@ -417,6 +419,8 @@ pub struct Questionnaire {
     pub v_immo_loc: f64,
     /// Cash-flow net mensuel du locatif direct (après crédit, charges, impôts).
     pub cf_immo: f64,
+    /// Loyers mensuels bruts du locatif direct, utilisés pour le ratio bancaire.
+    pub loyers_immo_loc_mensuels: f64,
     /// Sociétés civiles immobilières du foyer.
     pub scis: Vec<Sci>,
     /// Ventes immobilières programmées.
@@ -600,12 +604,14 @@ impl Questionnaire {
             },
             v_immo_loc: 30_000.0,
             cf_immo: 100.0,
+            loyers_immo_loc_mensuels: 900.0,
             scis: vec![Sci {
                 id: "sci-1".into(),
                 nom: "SCI du Moulin".into(),
                 regime: RegimeSci::Is,
                 part_foyer_pct: 50.0,
                 valeur_biens: 260_000.0,
+                base_amortissement: 260_000.0,
                 scpi: 0.0,
                 loyers_mensuels: 1_150.0,
                 charges_mensuelles: 250.0,
@@ -699,7 +705,7 @@ impl Questionnaire {
         let loyers: f64 =
             bilans.iter().map(|b| b.loyers_annuels_eur / 12.0 * b.part_foyer).fold(0.0, |a, b| a + b);
         // Le locatif direct est saisi net de crédit : on retient son cash-flow positif.
-        let revenus = f.revenus + (loyers + self.cf_immo.max(0.0)) * h.ponderation_loyers_bancaire;
+        let revenus = f.revenus + (loyers + self.loyers_immo_loc_mensuels.max(0.0)) * h.ponderation_loyers_bancaire;
         if revenus <= 0.0 {
             return 0.0;
         }
