@@ -76,24 +76,18 @@ pub fn abattements_particulier(annees: u32) -> (f64, f64) {
     (ir.clamp(0.0, 1.0), ps.clamp(0.0, 1.0))
 }
 
-/// Surtaxe sur les plus-values immobilières supérieures à 50 000 € (barème simplifié :
-/// progression par tranches de 2 % à 6 %).
+/// Surtaxe sur les plus-values immobilières supérieures à 50 000 €, avec le lissage
+/// légal aux transitions entre tranches.
 fn surtaxe(plus_value_imposable: f64) -> f64 {
     let pv = plus_value_imposable;
-    let taux = if pv <= 50_000.0 {
-        0.0
-    } else if pv <= 100_000.0 {
-        0.02
-    } else if pv <= 150_000.0 {
-        0.03
-    } else if pv <= 200_000.0 {
-        0.04
-    } else if pv <= 250_000.0 {
-        0.05
-    } else {
-        0.06
-    };
-    pv * taux
+    match pv {
+        ..=50_000.0 => 0.0,
+        ..=100_000.0 => pv * 0.02 - 1_000.0,
+        ..=150_000.0 => pv * 0.03 - 2_000.0,
+        ..=200_000.0 => pv * 0.04 - 3_500.0,
+        ..=250_000.0 => pv * 0.05 - 5_500.0,
+        _ => pv * 0.06 - 8_000.0,
+    }
 }
 
 fn eur(v: f64) -> String {
@@ -189,11 +183,12 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
     // payé par la société avant que le solde ne remonte au foyer.
     let produit_societe = prix - frais - credit_solde - if is { impot } else { 0.0 };
     let produit_net = if is {
-        let distribution = sci.expect("SCI présente").distribution_pct / 100.0;
         if produit_societe < 0.0 {
             produit_societe * quote_part
         } else {
-            produit_societe * distribution * quote_part * (1.0 - h.pfu)
+            // Une cession est liquidée indépendamment de la distribution annuelle
+            // des bénéfices : le produit exceptionnel remonte aux associés.
+            produit_societe * quote_part * (1.0 - h.pfu)
         }
     } else {
         (produit_societe - impot) * quote_part
@@ -309,9 +304,8 @@ mod tests {
             frais_vente_pct: 0.0,
         });
         let c = cession(&q, &q.ventes[0], &h);
-        // Aucun abattement avant 6 ans : 80 000 € imposés, plus la surtaxe de 2 % au-delà
-        // de 50 000 €.
-        let attendu = 80_000.0 * (h.taux_pv_immobiliere + h.prelevements_sociaux) + 1_600.0;
+        // Aucun abattement avant 6 ans : 80 000 € imposés, plus la surtaxe lissée.
+        let attendu = 80_000.0 * (h.taux_pv_immobiliere + h.prelevements_sociaux) + 600.0;
         assert!((c.impot_eur - attendu).abs() < 1.0, "{}", c.impot_eur);
         assert!(c.produit_net_eur < 172_000.0);
     }

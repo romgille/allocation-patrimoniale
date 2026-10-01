@@ -36,7 +36,7 @@ navigateur ──► web (nginx, non root) ──/api──► api (Rust/axum, d
 | Dossier | Contenu |
 |---|---|
 | `crates/engine` | Moteur de calcul en Rust : types d'entrée/sortie, poches 0/1/2, profils, modificateurs, garde-fous, répartition des flux, alertes. Testé unitairement. |
-| `crates/sci` | *(dans `crates/engine`)* Fiscalité des SCI (IR et IS) et plus-values de cession. |
+| `crates/engine/src/sci.rs` | Fiscalité des SCI (IR et IS) ; la logique de plus-values de cession est dans `crates/engine/src/cession.rs`. |
 | `crates/wasm` | Le même moteur exposé en WebAssembly (`hypotheses`, `exemple`, `calculer`, en JSON) pour la version GitHub Pages. |
 | `crates/api` | API HTTP axum : `GET /api/hypotheses`, `GET /api/exemple`, `POST /api/calcul`, `GET /api/sante`. |
 | `web` | Front React + TypeScript (strict). Les types de `web/src/bindings` sont **générés depuis Rust** avec ts-rs : le contrat front/back est vérifié à la compilation. |

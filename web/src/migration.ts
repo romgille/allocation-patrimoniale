@@ -64,10 +64,10 @@ function versV2(v1: QuestionnaireV1): QuestionnaireV2 {
  */
 function devinerObjet(libelle: string): ObjetCredit {
   const l = libelle.toLowerCase()
+  if (/locatif|investissement|rendement|sci|pinel|lmnp/.test(l)) return 'locatif'
   if (/résidence principale|residence principale|\brp\b|maison|appartement principal/.test(l)) {
     return 'residence_principale'
   }
-  if (/locatif|investissement|rendement|sci|pinel|lmnp/.test(l)) return 'locatif'
   if (/conso|voiture|auto|travaux|prêt perso|pret perso|revolving/.test(l)) return 'consommation'
   return 'autre'
 }

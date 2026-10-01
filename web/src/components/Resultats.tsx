@@ -320,7 +320,7 @@ export function Resultats({ r }: { r: Resultat }) {
               ? `${pct(r.synthese.taux_endettement_bancaire, 0)} en vue bancaire (crédits de SCI compris, loyers pondérés)`
               : 'Mensualités du foyer rapportées à ses revenus'
           }
-          ton={r.synthese.taux_endettement_bancaire > 0.35 ? 'ko' : undefined}
+          ton={Math.max(r.synthese.taux_endettement, r.synthese.taux_endettement_bancaire) > 0.35 ? 'ko' : undefined}
         />
       </div>
 

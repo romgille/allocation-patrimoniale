@@ -21,7 +21,7 @@ valeur_biens: number,
 /**
  * Base d'acquisition amortissable des biens (distincte de leur valeur vénale).
  */
-base_amortissement: number,
+base_amortissement: number, 
 /**
  * Parts de SCPI détenues par la SCI.
  */

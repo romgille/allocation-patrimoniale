@@ -176,6 +176,7 @@ pub fn valider(q: &Questionnaire, h: &Hypotheses) -> Result<(), Vec<String>> {
         ("Rendement sécurisé", h.rendement_securise),
         ("Seuil taux de dette", h.seuil_taux_dette),
         ("Endettement max", h.endettement_max),
+        ("Écart maximal de mensualité", h.ecart_mensualite_max),
         ("Plafond actions (tolérance faible)", h.actions_max_tolerance_faible),
         ("Plancher fonds euros", h.plancher_fonds_euros),
         ("Plancher fonds euros horizon court", h.plancher_fonds_euros_horizon_court),
@@ -196,10 +197,19 @@ pub fn valider(q: &Questionnaire, h: &Hypotheses) -> Result<(), Vec<String>> {
         ("Taux IS réduit", h.is_taux_reduit),
         ("Taux IS normal", h.is_taux_normal),
         ("Pondération des loyers bancaires", h.ponderation_loyers_bancaire),
+        ("Taux de plus-value immobilière", h.taux_pv_immobiliere),
     ] {
         fraction(&mut e, nom, v);
     }
-    montant(&mut e, "Seuil de bénéfice du taux IS réduit", h.is_seuil_taux_reduit);
+    for (nom, v) in [
+        ("Seuil de bénéfice du taux IS réduit", h.is_seuil_taux_reduit),
+        ("Plafond de déficit foncier", h.deficit_foncier_max),
+    ] {
+        montant(&mut e, nom, v);
+    }
+    if !h.revalorisation_immobilier.is_finite() || h.revalorisation_immobilier <= -1.0 {
+        e.push("La revalorisation immobilière doit être finie et supérieure à -100 %.".into());
+    }
     if h.duree_amortissement_ans == 0 {
         e.push("La durée d'amortissement doit être positive.".into());
     }

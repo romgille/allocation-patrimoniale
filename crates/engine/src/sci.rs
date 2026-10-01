@@ -11,9 +11,8 @@
 //!   (PFU) que sur ce qui est distribué : **le résultat conservé dans la SCI n'est pas un
 //!   revenu passif du foyer**, même s'il fait grossir son patrimoine.
 //!
-//! Limites assumées : pas de plus-value de cession (à l'IS, les amortissements déduits
-//! augmentent la plus-value taxable — une alerte le rappelle), pas de report de déficit
-//! d'un exercice sur l'autre, régime réel supposé (pas de micro-foncier).
+//! Limites assumées : pas de report de déficit d'un exercice sur l'autre, régime réel
+//! supposé (pas de micro-foncier).
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -81,7 +80,7 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
 
     let loyers = sci.loyers_mensuels * 12.0;
     let charges = sci.charges_mensuelles * 12.0;
-    let annuites = mensualites * 12.0;
+    let annuites: f64 = credits.iter().map(|d| (0..12).map(|m| d.mensualite_a(m)).sum::<f64>()).sum();
     let mut commentaires = Vec::new();
 
     // Amortissement : seule une SCI à l'IS amortit, et seulement la part bâtie du bien
@@ -99,7 +98,8 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
             let impot = if resultat > 0.0 {
                 resultat * (tmi.pct() as f64 / 100.0 + h.prelevements_sociaux)
             } else {
-                let imputable = (-resultat).min(h.deficit_foncier_max);
+                let deficit_hors_interets = (charges - loyers).max(0.0);
+                let imputable = deficit_hors_interets.min(h.deficit_foncier_max);
                 commentaires.push(format!(
                     "Déficit foncier de {} : imputable sur le revenu global à hauteur de {} par an, le reste sur les revenus fonciers des 10 années suivantes.",
                     eur(-resultat),

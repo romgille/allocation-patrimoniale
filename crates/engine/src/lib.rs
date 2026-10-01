@@ -535,7 +535,7 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
         )));
     }
 
-    let actuel_eur = allocation_actuelle_eur(q);
+    let actuel_eur = allocation_actuelle_eur(q, h);
     let liquidites = q.avoirs.liquidites_a_investir + p0.excedent_eur;
     // Capital financier : tout sauf l'immobilier locatif (ses revenus sont déjà comptés
     // dans le cash-flow immobilier).
@@ -552,7 +552,11 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
     let vente_directe = q.ventes.iter().find(|v| matches!(&v.bien, BienVendu::LocatifDirect));
     let mut liberations: Vec<(u32, f64)> = q
         .dettes_foyer()
-        .filter(|d| vente_directe.is_none() || d.objet != ObjetCredit::Locatif)
+        .filter(|d| {
+            vente_directe.is_none()
+                || d.objet != ObjetCredit::Locatif
+                || d.fin_mois().map_or(false, |fin| fin <= vente_directe.unwrap().dans_ans * 12)
+        })
         .filter_map(|d| d.fin_mois().map(|fin| (fin, d.mensualite)))
         .collect();
     let bilans = q.bilans_scis(h);
@@ -806,7 +810,7 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
                 detail: "Même en 60 ans, le flux actuel ne suffit pas : combiner avec les autres leviers.".into(),
             }),
         }
-        let r_possible = capital_simule * taux_retrait / 12.0 + q.cf_immo + q.autres_revenus_passifs;
+        let r_possible = capital_simule * taux_retrait / 12.0 + cf_immo_a_terme + q.autres_revenus_passifs;
         leviers.push(Levier {
             titre: "2. Baisser le revenu visé".into(),
             detail: format!(

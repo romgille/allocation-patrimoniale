@@ -68,12 +68,15 @@ pub fn profil_depuis_score(s: f64, h: &Hypotheses) -> Profil {
 }
 
 /// Allocation actuelle de la poche 2, en euros.
-pub fn allocation_actuelle_eur(q: &Questionnaire) -> Allocation {
+pub fn allocation_actuelle_eur(q: &Questionnaire, h: &Hypotheses) -> Allocation {
     let a = &q.avoirs;
+    let scpi = q.scpi_total(h);
+    let scpi_scis = (scpi - a.scpi).max(0.0);
+    let immobilier_scis_hors_scpi = (q.immo_locatif_net(h) - q.v_immo_loc - scpi_scis).max(0.0);
     Allocation {
         etf_monde: a.etf_monde,
         fonds_euros_obligations: a.fonds_euros_obligations,
-        immobilier: q.v_immo_loc + a.scpi,
+        immobilier: q.v_immo_loc + immobilier_scis_hors_scpi + scpi,
         or: a.or,
         actions_directes: a.actions_directes,
         crowdfunding: a.crowdfunding_immo + a.crowdfunding_enr,
@@ -92,7 +95,7 @@ pub struct Contexte {
 }
 
 pub fn contexte(q: &Questionnaire, h: &Hypotheses) -> Contexte {
-    let act = allocation_actuelle_eur(q);
+    let act = allocation_actuelle_eur(q, h);
     let base = act.total();
     let actuelle_pct = if base > 0.0 { act.map(|_, v| v / base) } else { Allocation::default() };
     let immo_total_pct = if base > 0.0 {
@@ -100,8 +103,8 @@ pub fn contexte(q: &Questionnaire, h: &Hypotheses) -> Contexte {
     } else {
         0.0
     };
-    let denom = q.p_fin() + q.v_immo_loc;
-    let ratio = if denom > 0.0 { q.v_immo_loc / denom } else { 0.0 };
+    let denom = q.p_fin() + q.immo_locatif_net(h);
+    let ratio = if denom > 0.0 { q.immo_locatif_net(h) / denom } else { 0.0 };
     Contexte {
         base_eur: base,
         actuelle_pct,
