@@ -243,7 +243,7 @@ function Immobilier({ immo }: { immo: ImmobilierBloc }) {
                     <td className="num">{eur(c.restant_du_eur)}</td>
                     <td className="num">
                       {c.duree_restante_mois > 0 ? (
-                        `${Math.round(c.duree_restante_mois / 12)} ans`
+                        `${c.duree_restante_mois} mois`
                       ) : (
                         <span className="muet">non renseignée</span>
                       )}

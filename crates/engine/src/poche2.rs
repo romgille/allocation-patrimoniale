@@ -71,8 +71,11 @@ pub fn profil_depuis_score(s: f64, h: &Hypotheses) -> Profil {
 pub fn allocation_actuelle_eur(q: &Questionnaire, h: &Hypotheses) -> Allocation {
     let a = &q.avoirs;
     let scpi = q.scpi_total(h);
-    let scpi_scis = (scpi - a.scpi).max(0.0);
-    let immobilier_scis_hors_scpi = (q.immo_locatif_net(h) - q.v_immo_loc - scpi_scis).max(0.0);
+    let immobilier_scis_hors_scpi: f64 = q
+        .bilans_scis(h)
+        .iter()
+        .map(|b| b.valeur_nette_eur - b.scpi_eur)
+        .sum();
     Allocation {
         etf_monde: a.etf_monde,
         fonds_euros_obligations: a.fonds_euros_obligations,

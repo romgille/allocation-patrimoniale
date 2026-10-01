@@ -23,6 +23,10 @@ valeur_biens: number,
  */
 base_amortissement: number, 
 /**
+ * Nombre d'années déjà amorties sur la base comptable.
+ */
+duree_amortie_ans: number, 
+/**
  * Parts de SCPI détenues par la SCI.
  */
 scpi: number, loyers_mensuels: number, 

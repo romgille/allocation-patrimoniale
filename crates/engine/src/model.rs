@@ -297,6 +297,9 @@ pub struct Sci {
     pub valeur_biens: f64,
     /// Base d'acquisition amortissable des biens (distincte de leur valeur vénale).
     pub base_amortissement: f64,
+    /// Nombre d'années déjà amorties sur la base comptable.
+    #[serde(default)]
+    pub duree_amortie_ans: u32,
     /// Parts de SCPI détenues par la SCI.
     pub scpi: f64,
     pub loyers_mensuels: f64,
@@ -612,6 +615,7 @@ impl Questionnaire {
                 part_foyer_pct: 50.0,
                 valeur_biens: 260_000.0,
                 base_amortissement: 260_000.0,
+                duree_amortie_ans: 0,
                 scpi: 0.0,
                 loyers_mensuels: 1_150.0,
                 charges_mensuelles: 250.0,

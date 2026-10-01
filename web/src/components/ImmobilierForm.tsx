@@ -127,6 +127,16 @@ export function ImmobilierForm({ q, onChange }: Props) {
                   aide="Prix d'acquisition comptable amortissable, distinct de la valeur vénale actuelle."
                 />
               )}
+              {s.regime === 'is' && (
+                <NumberField
+                  label="Durée déjà amortie"
+                  unite="ans"
+                  value={s.duree_amortie_ans}
+                  onChange={(v) => majSci(i, { duree_amortie_ans: v })}
+                  min={0}
+                  aide="Durée déjà écoulée depuis le début de l'amortissement comptable."
+                />
+              )}
               <NumberField label="SCPI détenues par la SCI" unite="€" value={s.scpi} onChange={(v) => majSci(i, { scpi: v })} min={0} />
               <NumberField label="Loyers encaissés" unite="€/mois" value={s.loyers_mensuels} onChange={(v) => majSci(i, { loyers_mensuels: v })} min={0} />
               <NumberField
@@ -171,6 +181,7 @@ export function ImmobilierForm({ q, onChange }: Props) {
               part_foyer_pct: 100,
               valeur_biens: 0,
               base_amortissement: 0,
+              duree_amortie_ans: 0,
               scpi: 0,
               loyers_mensuels: 0,
               charges_mensuelles: 0,

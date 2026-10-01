@@ -86,7 +86,7 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
     // Amortissement : seule une SCI à l'IS amortit, et seulement la part bâtie du bien
     // (le terrain ne s'amortit pas). Les SCPI ne sont pas amorties ici.
     let amortissement = match sci.regime {
-        RegimeSci::Is if h.duree_amortissement_ans > 0 => {
+        RegimeSci::Is if h.duree_amortissement_ans > sci.duree_amortie_ans => {
             sci.base_amortissement * h.part_amortissable / h.duree_amortissement_ans as f64
         }
         _ => 0.0,
@@ -188,6 +188,7 @@ mod tests {
             part_foyer_pct: 100.0,
             valeur_biens: 300_000.0,
             base_amortissement: 300_000.0,
+            duree_amortie_ans: 0,
             scpi: 0.0,
             loyers_mensuels: 1_500.0,
             charges_mensuelles: 300.0,

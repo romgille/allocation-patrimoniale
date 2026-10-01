@@ -539,7 +539,7 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
     let liquidites = q.avoirs.liquidites_a_investir + p0.excedent_eur;
     // Capital financier : tout sauf l'immobilier locatif (ses revenus sont déjà comptés
     // dans le cash-flow immobilier).
-    let capital_fin = actuel_eur.total() - q.v_immo_loc + liquidites;
+    let capital_fin = actuel_eur.total() - q.immo_locatif_net(h) + liquidites;
     let rendement = pp.rendement;
 
     let besoin_p2 = if q.h_fire == 0 { 0.0 } else { pmt(capital_cible, capital_fin, rendement, q.h_fire) };
@@ -1310,6 +1310,7 @@ mod tests {
             part_foyer_pct: 100.0,
             valeur_biens: 200_000.0,
             base_amortissement: 200_000.0,
+            duree_amortie_ans: 0,
             scpi: 0.0,
             loyers_mensuels: 1_400.0,
             charges_mensuelles: 200.0,
@@ -1373,6 +1374,7 @@ mod tests {
             part_foyer_pct: 100.0,
             valeur_biens: 300_000.0,
             base_amortissement: 300_000.0,
+            duree_amortie_ans: 0,
             scpi: 0.0,
             loyers_mensuels: 1_200.0,
             charges_mensuelles: 200.0,

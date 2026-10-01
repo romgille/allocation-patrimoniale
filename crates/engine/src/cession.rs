@@ -82,11 +82,15 @@ fn surtaxe(plus_value_imposable: f64) -> f64 {
     let pv = plus_value_imposable;
     match pv {
         ..=50_000.0 => 0.0,
-        ..=100_000.0 => pv * 0.02 - 1_000.0,
-        ..=150_000.0 => pv * 0.03 - 2_000.0,
-        ..=200_000.0 => pv * 0.04 - 3_500.0,
-        ..=250_000.0 => pv * 0.05 - 5_500.0,
-        _ => pv * 0.06 - 8_000.0,
+        ..=60_000.0 => pv * 0.02 - (60_000.0 - pv) * 0.1,
+        ..=100_000.0 => pv * 0.02,
+        ..=110_000.0 => pv * 0.03 - (110_000.0 - pv) * 0.1,
+        ..=150_000.0 => pv * 0.03,
+        ..=160_000.0 => pv * 0.04 - (160_000.0 - pv) * 0.1,
+        ..=200_000.0 => pv * 0.04,
+        ..=210_000.0 => pv * 0.05 - (210_000.0 - pv) * 0.1,
+        ..=250_000.0 => pv * 0.05,
+        _ => pv * 0.06,
     }
 }
 
@@ -99,6 +103,9 @@ fn capital_restant(d: &Dette, mois: u32) -> f64 {
     let i = d.taux() / 12.0;
     let mut capital = d.restant_du;
     for m in 0..mois {
+        if m >= d.duree_restante_mois {
+            return 0.0;
+        }
         if capital <= 0.0 {
             return 0.0;
         }
@@ -163,9 +170,9 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
         let (part_ir, part_ps) = abattements_particulier(annees);
         let assiette_ir = brute * part_ir;
         let assiette_ps = brute * part_ps;
-        let impot = assiette_ir * h.taux_pv_immobiliere
-            + assiette_ps * h.prelevements_sociaux
-            + surtaxe(assiette_ir);
+        let impot = assiette_ir * h.taux_pv_immobiliere * quote_part
+            + assiette_ps * h.prelevements_sociaux * quote_part
+            + surtaxe(assiette_ir * quote_part);
         if part_ir == 0.0 && part_ps == 0.0 {
             commentaires.push(format!("Détention de {annees} ans : plus-value totalement exonérée."));
         } else if part_ir < 1.0 {
@@ -191,7 +198,7 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
             produit_societe * quote_part * (1.0 - h.pfu)
         }
     } else {
-        (produit_societe - impot) * quote_part
+        produit_societe * quote_part - impot
     };
 
     let cash_flow_perdu = match &v.bien {
@@ -305,7 +312,7 @@ mod tests {
         });
         let c = cession(&q, &q.ventes[0], &h);
         // Aucun abattement avant 6 ans : 80 000 € imposés, plus la surtaxe lissée.
-        let attendu = 80_000.0 * (h.taux_pv_immobiliere + h.prelevements_sociaux) + 600.0;
+        let attendu = 80_000.0 * (h.taux_pv_immobiliere + h.prelevements_sociaux) + surtaxe(80_000.0);
         assert!((c.impot_eur - attendu).abs() < 1.0, "{}", c.impot_eur);
         assert!(c.produit_net_eur < 172_000.0);
     }
@@ -321,6 +328,7 @@ mod tests {
             part_foyer_pct: 100.0,
             valeur_biens: 300_000.0,
             base_amortissement: 300_000.0,
+            duree_amortie_ans: 0,
             scpi: 0.0,
             loyers_mensuels: 1_200.0,
             charges_mensuelles: 200.0,
