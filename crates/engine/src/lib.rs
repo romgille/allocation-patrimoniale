@@ -555,7 +555,7 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
         .filter(|d| {
             vente_directe.is_none()
                 || d.objet != ObjetCredit::Locatif
-                || d.fin_mois().map_or(false, |fin| fin <= vente_directe.unwrap().dans_ans * 12)
+                || d.fin_mois().is_some_and(|fin| fin <= vente_directe.unwrap().dans_ans * 12)
         })
         .filter_map(|d| d.fin_mois().map(|fin| (fin, d.mensualite)))
         .collect();
