@@ -139,17 +139,19 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
         BienVendu::Sci { id } => q.scis.iter().find(|s| &s.id == id),
         BienVendu::LocatifDirect => None,
     };
+    let quote_part = sci.map(|s| s.part_foyer()).unwrap_or(1.0);
     let mut commentaires = Vec::new();
 
     let is = sci.map(|s| s.regime) == Some(RegimeSci::Is);
     let (base, amortissements, abattement, impot, regime) = if is {
         // Valeur nette comptable : le prix d'acquisition moins tout ce qui a été amorti.
         let amort_annuel = if h.duree_amortissement_ans > 0 {
-            acquisition * h.part_amortissable / h.duree_amortissement_ans as f64
+            sci.expect("SCI présente").base_amortissement * part * h.part_amortissable / h.duree_amortissement_ans as f64
         } else {
             0.0
         };
-        let cumul = (amort_annuel * annees as f64).min(acquisition * h.part_amortissable);
+        let cumul = (amort_annuel * annees as f64)
+            .min(sci.expect("SCI présente").base_amortissement * part * h.part_amortissable);
         let vnc = (acquisition - cumul).max(0.0);
         let pv = (prix - frais - vnc).max(0.0);
         let impot = impot_societes(pv, h);
@@ -187,9 +189,14 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
     // payé par la société avant que le solde ne remonte au foyer.
     let produit_societe = prix - frais - credit_solde - if is { impot } else { 0.0 };
     let produit_net = if is {
-        produit_societe * (1.0 - h.pfu)
+        let distribution = sci.expect("SCI présente").distribution_pct / 100.0;
+        if produit_societe < 0.0 {
+            produit_societe * quote_part
+        } else {
+            produit_societe * distribution * quote_part * (1.0 - h.pfu)
+        }
     } else {
-        produit_societe - impot
+        (produit_societe - impot) * quote_part
     };
 
     let cash_flow_perdu = match &v.bien {
@@ -219,17 +226,17 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
         },
         dans_ans: v.dans_ans,
         part_vendue: part,
-        prix_vente_eur: prix,
-        frais_vente_eur: frais,
-        credit_solde_eur: credit_solde,
-        plus_value_brute_eur: base,
-        amortissements_reintegres_eur: amortissements,
-        abattement_eur: abattement,
-        impot_eur: impot,
+        prix_vente_eur: prix * quote_part,
+        frais_vente_eur: frais * quote_part,
+        credit_solde_eur: credit_solde * quote_part,
+        plus_value_brute_eur: base * quote_part,
+        amortissements_reintegres_eur: amortissements * quote_part,
+        abattement_eur: abattement * quote_part,
+        impot_eur: impot * quote_part,
         regime_libelle: regime.into(),
         produit_net_eur: produit_net,
         cash_flow_perdu_mensuel_eur: cash_flow_perdu,
-        mensualites_liberees_eur: mensualites_liberees,
+        mensualites_liberees_eur: mensualites_liberees * quote_part,
         commentaires,
     }
 }

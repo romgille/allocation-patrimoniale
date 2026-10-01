@@ -549,26 +549,44 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
 
     // Épargne libérée au fil du temps : fin des crédits du foyer, fin de l'effort sur une
     // SCI vendue, et mensualités que la vente d'un bien fait disparaître.
+    let vente_directe = q.ventes.iter().find(|v| matches!(&v.bien, BienVendu::LocatifDirect));
     let mut liberations: Vec<(u32, f64)> = q
         .dettes_foyer()
+        .filter(|d| vente_directe.is_none() || d.objet != ObjetCredit::Locatif)
         .filter_map(|d| d.fin_mois().map(|fin| (fin, d.mensualite)))
         .collect();
     let bilans = q.bilans_scis(h);
     for (v, c) in q.ventes.iter().zip(ventes.iter()) {
-        liberations.push((v.dans_ans * 12, c.mensualites_liberees_eur));
-        if let BienVendu::Sci { id } = &v.bien {
+        match &v.bien {
+            BienVendu::LocatifDirect => {
+                liberations.push((v.dans_ans * 12, c.mensualites_liberees_eur));
+                for d in q.dettes_foyer().filter(|d| d.objet == ObjetCredit::Locatif) {
+                    if let Some(fin) = d.fin_mois() {
+                        liberations.push((fin, d.mensualite * (1.0 - v.part_vendue())));
+                    }
+                }
+            }
+            BienVendu::Sci { id } => {
             if let Some(b) = bilans.iter().find(|b| &b.id == id) {
-                let mut effort = b.effort_mensuel_eur * v.part_vendue();
+                liberations.push((v.dans_ans * 12, b.effort_mensuel_eur * v.part_vendue()));
+                let total_mensualites = q
+                    .dettes
+                    .iter()
+                    .filter(|d| d.sci_id.as_deref() == Some(id))
+                    .map(|d| d.mensualite)
+                    .sum::<f64>();
                 for d in q.dettes.iter().filter(|d| d.sci_id.as_deref() == Some(id)) {
                     if let Some(fin) = d.fin_mois() {
-                        let liberee = effort.min(d.mensualite * v.part_vendue());
-                        if liberee > 0.0 {
-                            liberations.push((fin, liberee));
-                            effort -= liberee;
+                        if total_mensualites > 0.0 {
+                            liberations.push((
+                                fin,
+                                b.effort_mensuel_eur * d.mensualite / total_mensualites * (1.0 - v.part_vendue()),
+                            ));
                         }
                     }
                 }
             }
+        }
         }
     }
     let apports: Vec<(u32, f64)> =

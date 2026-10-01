@@ -117,6 +117,16 @@ export function ImmobilierForm({ q, onChange }: Props) {
                 aide="Part des parts sociales détenues par le foyer."
               />
               <NumberField label="Valeur des biens" unite="€" value={s.valeur_biens} onChange={(v) => majSci(i, { valeur_biens: v })} min={0} />
+              {s.regime === 'is' && (
+                <NumberField
+                  label="Base d'amortissement"
+                  unite="€"
+                  value={s.base_amortissement}
+                  onChange={(v) => majSci(i, { base_amortissement: v })}
+                  min={0}
+                  aide="Prix d'acquisition comptable amortissable, distinct de la valeur vénale actuelle."
+                />
+              )}
               <NumberField label="SCPI détenues par la SCI" unite="€" value={s.scpi} onChange={(v) => majSci(i, { scpi: v })} min={0} />
               <NumberField label="Loyers encaissés" unite="€/mois" value={s.loyers_mensuels} onChange={(v) => majSci(i, { loyers_mensuels: v })} min={0} />
               <NumberField

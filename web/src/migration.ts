@@ -75,6 +75,7 @@ function devinerObjet(libelle: string): ObjetCredit {
 function versV3(v2: QuestionnaireV2): Questionnaire {
   return {
     ...v2,
+    loyers_immo_loc_mensuels: 0,
     scis: [],
     ventes: [],
     // La durée reste inconnue : le moteur suppose alors que le crédit court jusqu'au bout

@@ -69,6 +69,7 @@ pub fn valider(q: &Questionnaire, h: &Hypotheses) -> Result<(), Vec<String>> {
         ("Le revenu passif visé", q.r_cible),
         ("Les autres revenus passifs", q.autres_revenus_passifs),
         ("La valeur nette du locatif", q.v_immo_loc),
+        ("Les loyers bruts du locatif", q.loyers_immo_loc_mensuels),
         ("Les livrets", q.avoirs.livrets),
         ("Les liquidités à investir", q.avoirs.liquidites_a_investir),
         ("Les ETF monde", q.avoirs.etf_monde),
