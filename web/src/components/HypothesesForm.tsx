@@ -165,6 +165,30 @@ export function HypothesesForm({ h, defauts, onChange }: Props) {
           {nbF('precaution_mois_max', 'Précaution maximale (revenus instables)', 'mois')}
           {pctF('seuil_taux_dette', 'Rembourser en priorité les crédits au-delà de')}
           {pctF('endettement_max', 'Endettement maximal pour le levier immobilier')}
+          {pctF('ecart_mensualite_max', 'Écart maximal entre mensualité saisie et théorique')}
+          {pctF('ponderation_loyers_bancaire', 'Part des loyers retenue par les banques')}
+        </div>
+      </details>
+
+      <details>
+        <summary>SCI et immobilier</summary>
+        <div className="grille">
+          {pctF('part_amortissable', 'Part amortissable des biens')}
+          {nbF('duree_amortissement_ans', 'Durée d’amortissement', 'ans', true)}
+          {pctF('is_taux_reduit', 'Taux IS réduit')}
+          {eurF('is_seuil_taux_reduit', 'Seuil de taux IS réduit')}
+          {pctF('is_taux_normal', 'Taux IS normal')}
+          {eurF('deficit_foncier_max', 'Déficit foncier imputable / an')}
+          {pctF('taux_pv_immobiliere', 'Taux de plus-value immobilière')}
+          <NumberField
+            label="Revalorisation annuelle de l’immobilier"
+            unite="%"
+            facteur={100}
+            value={h.revalorisation_immobilier}
+            onChange={(v) => set('revalorisation_immobilier', v)}
+            min={-100}
+            max={100}
+          />
         </div>
       </details>
 

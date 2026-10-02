@@ -82,14 +82,15 @@ fn surtaxe(plus_value_imposable: f64) -> f64 {
     let pv = plus_value_imposable;
     match pv {
         ..=50_000.0 => 0.0,
-        ..=60_000.0 => pv * 0.02 - (60_000.0 - pv) * 0.1,
+        ..=60_000.0 => pv * 0.02 - (60_000.0 - pv) * 0.05,
         ..=100_000.0 => pv * 0.02,
         ..=110_000.0 => pv * 0.03 - (110_000.0 - pv) * 0.1,
         ..=150_000.0 => pv * 0.03,
-        ..=160_000.0 => pv * 0.04 - (160_000.0 - pv) * 0.1,
+        ..=160_000.0 => pv * 0.04 - (160_000.0 - pv) * 0.15,
         ..=200_000.0 => pv * 0.04,
-        ..=210_000.0 => pv * 0.05 - (210_000.0 - pv) * 0.1,
+        ..=210_000.0 => pv * 0.05 - (210_000.0 - pv) * 0.20,
         ..=250_000.0 => pv * 0.05,
+        ..=260_000.0 => pv * 0.06 - (260_000.0 - pv) * 0.25,
         _ => pv * 0.06,
     }
 }
@@ -156,7 +157,14 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
             .min(sci.expect("SCI présente").base_amortissement * part * h.part_amortissable);
         let vnc = (acquisition - cumul).max(0.0);
         let pv = (prix - frais - vnc).max(0.0);
-        let impot = impot_societes(pv, h);
+        let resultat_exploitation = q
+            .bilans_scis(h)
+            .into_iter()
+            .find(|b| Some(b.id.as_str()) == sci.map(|s| s.id.as_str()))
+            .map(|b| b.resultat_imposable_eur)
+            .unwrap_or(0.0);
+        let impot =
+            (impot_societes(resultat_exploitation + pv, h) - impot_societes(resultat_exploitation, h)).max(0.0);
         commentaires.push(format!(
             "SCI à l'IS : {} d'amortissements déduits depuis l'acquisition sont réintégrés dans la plus-value. Sans eux, l'impôt de cession serait de {}.",
             eur(cumul),
@@ -203,12 +211,12 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
     };
 
     let cash_flow_perdu = match &v.bien {
-        BienVendu::LocatifDirect => q.cf_immo.max(0.0) * part,
+        BienVendu::LocatifDirect => q.cf_immo * part,
         BienVendu::Sci { id } => q
             .bilans_scis(h)
             .iter()
             .find(|b| &b.id == id)
-            .map(|b| b.cash_flow_foyer_mensuel_eur.max(0.0))
+            .map(|b| b.cash_flow_foyer_mensuel_eur)
             .unwrap_or(0.0)
             * part,
     };
