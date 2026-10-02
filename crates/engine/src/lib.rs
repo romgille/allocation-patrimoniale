@@ -1374,7 +1374,7 @@ mod tests {
             part_foyer_pct: 100.0,
             valeur_biens: 300_000.0,
             base_amortissement: 300_000.0,
-            duree_amortie_ans: 0,
+            duree_amortie_ans: 12,
             scpi: 0.0,
             loyers_mensuels: 1_200.0,
             charges_mensuelles: 200.0,
