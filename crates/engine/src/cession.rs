@@ -103,7 +103,7 @@ fn capital_restant(d: &Dette, mois: u32) -> f64 {
     let i = d.taux() / 12.0;
     let mut capital = d.restant_du;
     for m in 0..mois {
-        if m >= d.duree_restante_mois {
+        if d.duree_restante_mois > 0 && m >= d.duree_restante_mois {
             return 0.0;
         }
         if capital <= 0.0 {
@@ -151,7 +151,8 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
         } else {
             0.0
         };
-        let cumul = (amort_annuel * annees as f64)
+        let duree_amortie = sci.expect("SCI présente").duree_amortie_ans.saturating_add(v.dans_ans);
+        let cumul = (amort_annuel * duree_amortie as f64)
             .min(sci.expect("SCI présente").base_amortissement * part * h.part_amortissable);
         let vnc = (acquisition - cumul).max(0.0);
         let pv = (prix - frais - vnc).max(0.0);
@@ -234,7 +235,7 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
         plus_value_brute_eur: base * quote_part,
         amortissements_reintegres_eur: amortissements * quote_part,
         abattement_eur: abattement * quote_part,
-        impot_eur: impot * quote_part,
+        impot_eur: if is { impot * quote_part } else { impot },
         regime_libelle: regime.into(),
         produit_net_eur: produit_net,
         cash_flow_perdu_mensuel_eur: cash_flow_perdu,
@@ -328,7 +329,7 @@ mod tests {
             part_foyer_pct: 100.0,
             valeur_biens: 300_000.0,
             base_amortissement: 300_000.0,
-            duree_amortie_ans: 0,
+            duree_amortie_ans: 3,
             scpi: 0.0,
             loyers_mensuels: 1_200.0,
             charges_mensuelles: 200.0,
@@ -346,10 +347,10 @@ mod tests {
             frais_vente_pct: 0.0,
         }];
         let c = cession(&q, &q.ventes[0], &h);
-        // Vendu au prix d'achat : aucune plus-value pour un particulier, mais à l'IS la
-        // valeur nette comptable a baissé de 10 ans d'amortissements (85 000 €).
-        assert!((c.amortissements_reintegres_eur - 85_000.0).abs() < 1.0);
-        assert!((c.plus_value_brute_eur - 85_000.0).abs() < 1.0);
+        // La vente intervient après trois années déjà amorties : la valeur nette comptable
+        // a baissé de trois annuités (25 500 €), indépendamment de la durée de détention saisie.
+        assert!((c.amortissements_reintegres_eur - 25_500.0).abs() < 1.0);
+        assert!((c.plus_value_brute_eur - 25_500.0).abs() < 1.0);
         assert!(c.impot_eur > 0.0);
     }
 
@@ -381,5 +382,33 @@ mod tests {
         assert!(c.credit_solde_eur > 0.0 && c.credit_solde_eur < 100_000.0);
         assert!((c.mensualites_liberees_eur - 600.0).abs() < 1e-6);
         assert!(c.produit_net_eur > 100_000.0);
+    }
+
+    #[test]
+    fn credit_sans_duree_reste_actif() {
+        let h = Hypotheses::default();
+        let mut q = Questionnaire::exemple();
+        q.dettes = vec![Dette {
+            libelle: "Crédit locatif".into(),
+            taux_pct: 2.0,
+            restant_du: 100_000.0,
+            mensualite: 600.0,
+            duree_restante_mois: 0,
+            objet: ObjetCredit::Locatif,
+            sci_id: None,
+        }];
+        q.ventes = vec![VenteImmobiliere {
+            libelle: "Vente".into(),
+            bien: BienVendu::LocatifDirect,
+            dans_ans: 5,
+            part_vendue_pct: 100.0,
+            prix_vente: 200_000.0,
+            prix_acquisition: 200_000.0,
+            detention_ans: 25,
+            frais_vente_pct: 0.0,
+        }];
+
+        let c = cession(&q, &q.ventes[0], &h);
+        assert!(c.credit_solde_eur > 0.0);
     }
 }
