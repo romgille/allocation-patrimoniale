@@ -8,6 +8,8 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::params::Hypotheses;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
@@ -196,6 +198,36 @@ pub struct Projet {
     pub capital_deja_affecte: f64,
 }
 
+/// Ce que finance le crédit : le levier n'a pas le même sens sur un bien qui rapporte
+/// que sur une voiture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ObjetCredit {
+    ResidencePrincipale,
+    /// Immobilier locatif (en direct ou via une SCI) : le bien produit des loyers.
+    Locatif,
+    /// Crédit à la consommation, auto, travaux…
+    Consommation,
+    Autre,
+}
+
+impl ObjetCredit {
+    pub fn libelle(self) -> &'static str {
+        match self {
+            ObjetCredit::ResidencePrincipale => "Résidence principale",
+            ObjetCredit::Locatif => "Immobilier locatif",
+            ObjetCredit::Consommation => "Consommation",
+            ObjetCredit::Autre => "Autre",
+        }
+    }
+
+    /// Un crédit adossé à un bien qui produit des revenus : le levier joue.
+    pub fn productif(self) -> bool {
+        self == ObjetCredit::Locatif
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Dette {
@@ -203,6 +235,129 @@ pub struct Dette {
     pub taux_pct: f64,
     pub restant_du: f64,
     pub mensualite: f64,
+    /// Nombre de mensualités restantes. 0 = durée inconnue (le crédit est alors
+    /// supposé courir jusqu'au bout de la projection).
+    pub duree_restante_mois: u32,
+    pub objet: ObjetCredit,
+    /// Identifiant de la SCI qui porte le crédit ; `None` = crédit du foyer.
+    pub sci_id: Option<String>,
+}
+
+impl Dette {
+    pub fn taux(&self) -> f64 {
+        self.taux_pct / 100.0
+    }
+
+    /// Mois de la dernière mensualité ; `None` si la durée n'est pas renseignée.
+    pub fn fin_mois(&self) -> Option<u32> {
+        (self.duree_restante_mois > 0).then_some(self.duree_restante_mois)
+    }
+
+    /// Mensualité encore due au mois `m` (0 = aujourd'hui).
+    pub fn mensualite_a(&self, m: u32) -> f64 {
+        match self.fin_mois() {
+            Some(fin) if m >= fin => 0.0,
+            _ => self.mensualite,
+        }
+    }
+}
+
+/// Régime fiscal de la SCI. Le choix change tout : à l'IR les loyers sont imposés
+/// chaque année chez les associés ; à l'IS la société amortit le bien et n'impose
+/// les associés qu'au moment de la distribution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum RegimeSci {
+    Ir,
+    Is,
+}
+
+impl RegimeSci {
+    pub fn libelle(self) -> &'static str {
+        match self {
+            RegimeSci::Ir => "SCI à l'IR (translucide)",
+            RegimeSci::Is => "SCI à l'IS",
+        }
+    }
+}
+
+/// Société civile immobilière détenant de l'immobilier locatif et/ou des parts de SCPI.
+/// Les crédits de la SCI sont saisis avec les autres crédits, rattachés par `sci_id`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Sci {
+    /// Identifiant stable, utilisé par `Dette::sci_id`.
+    pub id: String,
+    pub nom: String,
+    pub regime: RegimeSci,
+    /// Quote-part détenue par le foyer (%) : une SCI est souvent partagée avec des tiers.
+    pub part_foyer_pct: f64,
+    /// Valeur vénale des biens détenus par la SCI.
+    pub valeur_biens: f64,
+    /// Base d'acquisition amortissable des biens (distincte de leur valeur vénale).
+    pub base_amortissement: f64,
+    /// Nombre d'années déjà amorties sur la base comptable.
+    #[serde(default)]
+    pub duree_amortie_ans: u32,
+    /// Parts de SCPI détenues par la SCI.
+    pub scpi: f64,
+    pub loyers_mensuels: f64,
+    /// Charges mensuelles hors crédit et hors impôt (taxe foncière, gestion, travaux courants).
+    pub charges_mensuelles: f64,
+    /// SCI à l'IS : part du résultat distribuée aux associés (%). Le reste est capitalisé
+    /// dans la société et ne constitue donc pas un revenu passif du foyer.
+    pub distribution_pct: f64,
+}
+
+impl Sci {
+    pub fn part_foyer(&self) -> f64 {
+        (self.part_foyer_pct / 100.0).clamp(0.0, 1.0)
+    }
+}
+
+/// Bien vendable : le locatif détenu en direct, ou les biens d'une SCI.
+/// La résidence principale est hors périmètre (elle changerait aussi le budget logement).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export)]
+pub enum BienVendu {
+    /// Immobilier locatif détenu en direct par le foyer.
+    LocatifDirect,
+    /// Biens d'une SCI, désignée par son identifiant.
+    Sci { id: String },
+}
+
+/// Vente d'un bien immobilier programmée à une échéance.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct VenteImmobiliere {
+    pub libelle: String,
+    pub bien: BienVendu,
+    /// Échéance de la vente, en années à partir d'aujourd'hui.
+    pub dans_ans: u32,
+    /// Part du bien vendue (%) : 100 = vente totale.
+    pub part_vendue_pct: f64,
+    /// Prix de vente attendu, en euros d'aujourd'hui.
+    pub prix_vente: f64,
+    /// Prix d'acquisition, frais d'acquisition et travaux inclus (base de la plus-value).
+    pub prix_acquisition: f64,
+    /// Années de détention déjà écoulées à ce jour (les abattements courent en plus
+    /// jusqu'à la date de vente).
+    pub detention_ans: u32,
+    /// Frais d'agence et de diagnostics, en % du prix de vente.
+    pub frais_vente_pct: f64,
+}
+
+impl VenteImmobiliere {
+    pub fn part_vendue(&self) -> f64 {
+        (self.part_vendue_pct / 100.0).clamp(0.0, 1.0)
+    }
+
+    /// Durée de détention au jour de la vente.
+    pub fn detention_a_la_vente(&self) -> u32 {
+        self.detention_ans + self.dans_ans
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, Default)]
@@ -263,10 +418,16 @@ pub struct Questionnaire {
 
     // --- Patrimoine ---
     pub avoirs: Avoirs,
-    /// Valeur nette (valeur − capital restant dû) de l'immobilier locatif.
+    /// Valeur nette (valeur − capital restant dû) de l'immobilier locatif détenu en direct.
     pub v_immo_loc: f64,
-    /// Cash-flow net mensuel du locatif (après crédit, charges, impôts).
+    /// Cash-flow net mensuel du locatif direct (après crédit, charges, impôts).
     pub cf_immo: f64,
+    /// Loyers mensuels bruts du locatif direct, utilisés pour le ratio bancaire.
+    pub loyers_immo_loc_mensuels: f64,
+    /// Sociétés civiles immobilières du foyer.
+    pub scis: Vec<Sci>,
+    /// Ventes immobilières programmées.
+    pub ventes: Vec<VenteImmobiliere>,
     pub dettes: Vec<Dette>,
 
     // --- Préférences ---
@@ -289,18 +450,39 @@ pub struct Foyer {
     pub abondement_employeur: bool,
     pub revenus: f64,
     pub depenses: f64,
+    /// Mensualités des crédits portés par le foyer (hors crédits de SCI).
     pub mensualites: f64,
+    /// Effort d'épargne mensuel à apporter aux SCI dont la trésorerie est négative.
+    pub effort_scis: f64,
     pub capacite_calculee: f64,
     /// Épargne mensuelle retenue pour la répartition.
     pub e_mois: f64,
 }
 
 impl Questionnaire {
-    pub fn foyer(&self) -> Foyer {
+    /// Crédits portés par le foyer lui-même (hors SCI).
+    pub fn dettes_foyer(&self) -> impl Iterator<Item = &Dette> {
+        self.dettes.iter().filter(|d| d.sci_id.is_none())
+    }
+
+    /// Crédits portés par les SCI.
+    pub fn dettes_scis(&self) -> impl Iterator<Item = &Dette> {
+        self.dettes.iter().filter(|d| d.sci_id.is_some())
+    }
+
+    /// Bilan annuel de chaque SCI, du point de vue du foyer.
+    pub fn bilans_scis(&self, h: &Hypotheses) -> Vec<crate::sci::BilanSci> {
+        self.scis.iter().map(|s| crate::sci::bilan(s, &self.dettes, self.tmi, h)).collect()
+    }
+
+    pub fn foyer(&self, h: &Hypotheses) -> Foyer {
         let revenus = self.adultes.iter().map(Adulte::revenu_total).fold(0.0, |a, b| a + b);
         let depenses = self.depenses.iter().map(|d| d.montant_mensuel).fold(0.0, |a, b| a + b);
-        let mensualites = self.dettes.iter().map(|d| d.mensualite).fold(0.0, |a, b| a + b);
-        let capacite = revenus - depenses - mensualites;
+        let mensualites = self.dettes_foyer().map(|d| d.mensualite).fold(0.0, |a, b| a + b);
+        // Une SCI dont la trésorerie ne couvre pas son crédit est comblée par le foyer :
+        // c'est autant d'épargne en moins.
+        let effort_scis = self.bilans_scis(h).iter().map(|b| b.effort_mensuel_eur).fold(0.0, |a, b| a + b);
+        let capacite = revenus - depenses - mensualites - effort_scis;
         let stab_ponderee = if revenus > 0.0 {
             self.adultes.iter().map(|a| a.stab_revenus as f64 * a.revenu_total()).sum::<f64>() / revenus
         } else if self.adultes.is_empty() {
@@ -324,6 +506,7 @@ impl Questionnaire {
             revenus,
             depenses,
             mensualites,
+            effort_scis,
             capacite_calculee: capacite,
             e_mois: self.epargne_mensuelle_forcee.unwrap_or(capacite).max(0.0),
         }
@@ -424,12 +607,50 @@ impl Questionnaire {
             },
             v_immo_loc: 30_000.0,
             cf_immo: 100.0,
-            dettes: vec![Dette {
-                libelle: "Crédit résidence principale".into(),
-                taux_pct: 1.3,
-                restant_du: 160_000.0,
-                mensualite: 1_050.0,
+            loyers_immo_loc_mensuels: 900.0,
+            scis: vec![Sci {
+                id: "sci-1".into(),
+                nom: "SCI du Moulin".into(),
+                regime: RegimeSci::Is,
+                part_foyer_pct: 50.0,
+                valeur_biens: 260_000.0,
+                base_amortissement: 260_000.0,
+                duree_amortie_ans: 0,
+                scpi: 0.0,
+                loyers_mensuels: 1_150.0,
+                charges_mensuelles: 250.0,
+                distribution_pct: 0.0,
             }],
+            ventes: vec![VenteImmobiliere {
+                libelle: "Vendre l'appartement locatif".into(),
+                bien: BienVendu::LocatifDirect,
+                dans_ans: 8,
+                part_vendue_pct: 100.0,
+                prix_vente: 190_000.0,
+                prix_acquisition: 150_000.0,
+                detention_ans: 6,
+                frais_vente_pct: 5.0,
+            }],
+            dettes: vec![
+                Dette {
+                    libelle: "Crédit résidence principale".into(),
+                    taux_pct: 1.3,
+                    restant_du: 160_000.0,
+                    mensualite: 1_050.0,
+                    duree_restante_mois: 168,
+                    objet: ObjetCredit::ResidencePrincipale,
+                    sci_id: None,
+                },
+                Dette {
+                    libelle: "Crédit SCI du Moulin".into(),
+                    taux_pct: 3.1,
+                    restant_du: 175_000.0,
+                    mensualite: 1_010.0,
+                    duree_restante_mois: 216,
+                    objet: ObjetCredit::Locatif,
+                    sci_id: Some("sci-1".into()),
+                },
+            ],
             contraintes: Contraintes::default(),
         }
     }
@@ -452,13 +673,47 @@ impl Questionnaire {
             + self.projets.iter().map(|p| p.capital_deja_affecte).sum::<f64>()
     }
 
-    /// Taux d'endettement (mensualités / revenus nets du foyer).
-    pub fn taux_endettement(&self) -> f64 {
-        let f = self.foyer();
+    /// Immobilier locatif net total : détention directe + quote-part des SCI.
+    pub fn immo_locatif_net(&self, h: &Hypotheses) -> f64 {
+        self.v_immo_loc + self.bilans_scis(h).iter().map(|b| b.valeur_nette_eur).fold(0.0, |a, b| a + b)
+    }
+
+    /// SCPI détenues en direct et via les SCI.
+    pub fn scpi_total(&self, h: &Hypotheses) -> f64 {
+        self.avoirs.scpi + self.bilans_scis(h).iter().map(|b| b.scpi_eur).fold(0.0, |a, b| a + b)
+    }
+
+    /// Revenu passif immobilier mensuel réellement perçu par le foyer, net d'impôt :
+    /// locatif direct + ce que les SCI distribuent effectivement.
+    pub fn cf_immo_total(&self, h: &Hypotheses) -> f64 {
+        self.cf_immo
+            + self.bilans_scis(h).iter().map(|b| b.cash_flow_foyer_mensuel_eur.max(0.0)).fold(0.0, |a, b| a + b)
+    }
+
+    /// Taux d'endettement du foyer : ses seules mensualités rapportées à ses revenus.
+    pub fn taux_endettement(&self, h: &Hypotheses) -> f64 {
+        let f = self.foyer(h);
         if f.revenus <= 0.0 {
             return 0.0;
         }
         f.mensualites / f.revenus
+    }
+
+    /// Taux d'endettement au sens bancaire : toutes les mensualités, y compris celles des
+    /// SCI, rapportées aux revenus augmentés des loyers pondérés (les banques ne retiennent
+    /// qu'une partie des loyers pour couvrir la vacance et les charges).
+    pub fn taux_endettement_bancaire(&self, h: &Hypotheses) -> f64 {
+        let f = self.foyer(h);
+        let bilans = self.bilans_scis(h);
+        let mensualites_scis: f64 = bilans.iter().map(|b| b.mensualites_mensuelles_eur).fold(0.0, |a, b| a + b);
+        let loyers: f64 =
+            bilans.iter().map(|b| b.loyers_annuels_eur / 12.0 * b.part_foyer).fold(0.0, |a, b| a + b);
+        // Le locatif direct est saisi net de crédit : on retient son cash-flow positif.
+        let revenus = f.revenus + (loyers + self.loyers_immo_loc_mensuels.max(0.0)) * h.ponderation_loyers_bancaire;
+        if revenus <= 0.0 {
+            return 0.0;
+        }
+        (f.mensualites + mensualites_scis) / revenus
     }
 }
 
@@ -468,8 +723,9 @@ mod tests {
 
     #[test]
     fn agregats_du_foyer() {
+        let h = Hypotheses::default();
         let q = Questionnaire::exemple();
-        let f = q.foyer();
+        let f = q.foyer(&h);
         assert_eq!(f.age, 36);
         assert!(f.en_couple);
         assert_eq!(f.tol_risque, 3);
@@ -478,7 +734,12 @@ mod tests {
         assert!(f.abondement_employeur);
         assert!((f.revenus - 5_800.0).abs() < 1e-9);
         assert!((f.depenses - 2_670.0).abs() < 1e-9);
-        assert!((f.capacite_calculee - (5_800.0 - 2_670.0 - 1_050.0)).abs() < 1e-9);
+        // La SCI de l'exemple est en trésorerie négative : le foyer comble la différence,
+        // qui vient en déduction de la capacité d'épargne.
+        assert!(f.effort_scis > 0.0);
+        assert!((f.capacite_calculee - (5_800.0 - 2_670.0 - 1_050.0 - f.effort_scis)).abs() < 1e-9);
+        // Seule la mensualité du crédit du foyer est comptée ; celle de la SCI ne l'est pas.
+        assert!((f.mensualites - 1_050.0).abs() < 1e-9);
         assert!((f.e_mois - f.capacite_calculee).abs() < 1e-9);
         // (3 × 3200 + 2 × 2600) / 5800
         assert!((f.stab_ponderee - 14_800.0 / 5_800.0).abs() < 1e-9);
@@ -488,10 +749,11 @@ mod tests {
     fn epargne_forcee_et_deficit() {
         let mut q = Questionnaire::exemple();
         q.epargne_mensuelle_forcee = Some(500.0);
-        assert_eq!(q.foyer().e_mois, 500.0);
+        let h = Hypotheses::default();
+        assert_eq!(q.foyer(&h).e_mois, 500.0);
         q.epargne_mensuelle_forcee = None;
         q.depenses.push(Depense { poste: PosteDepense::Autre, libelle: "x".into(), montant_mensuel: 10_000.0 });
-        let f = q.foyer();
+        let f = q.foyer(&h);
         assert!(f.capacite_calculee < 0.0);
         assert_eq!(f.e_mois, 0.0);
     }

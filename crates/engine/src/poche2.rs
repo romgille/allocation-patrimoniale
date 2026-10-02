@@ -8,7 +8,7 @@ use crate::params::{Allocation, Hypotheses, Ligne, Profil};
 const EPS: f64 = 1e-9;
 
 pub fn score(q: &Questionnaire, h: &Hypotheses) -> (f64, Vec<DetailScore>) {
-    let f = q.foyer();
+    let f = q.foyer(h);
     let tol_libelle = if f.en_couple && f.tol_max != f.tol_risque {
         format!("Tolérance au risque ({}/5, la plus prudente du foyer)", f.tol_risque)
     } else {
@@ -68,12 +68,18 @@ pub fn profil_depuis_score(s: f64, h: &Hypotheses) -> Profil {
 }
 
 /// Allocation actuelle de la poche 2, en euros.
-pub fn allocation_actuelle_eur(q: &Questionnaire) -> Allocation {
+pub fn allocation_actuelle_eur(q: &Questionnaire, h: &Hypotheses) -> Allocation {
     let a = &q.avoirs;
+    let scpi = q.scpi_total(h);
+    let immobilier_scis_hors_scpi: f64 = q
+        .bilans_scis(h)
+        .iter()
+        .map(|b| b.valeur_nette_eur - b.scpi_eur)
+        .sum();
     Allocation {
         etf_monde: a.etf_monde,
         fonds_euros_obligations: a.fonds_euros_obligations,
-        immobilier: q.v_immo_loc + a.scpi,
+        immobilier: q.v_immo_loc + immobilier_scis_hors_scpi + scpi,
         or: a.or,
         actions_directes: a.actions_directes,
         crowdfunding: a.crowdfunding_immo + a.crowdfunding_enr,
@@ -92,7 +98,7 @@ pub struct Contexte {
 }
 
 pub fn contexte(q: &Questionnaire, h: &Hypotheses) -> Contexte {
-    let act = allocation_actuelle_eur(q);
+    let act = allocation_actuelle_eur(q, h);
     let base = act.total();
     let actuelle_pct = if base > 0.0 { act.map(|_, v| v / base) } else { Allocation::default() };
     let immo_total_pct = if base > 0.0 {
@@ -100,8 +106,8 @@ pub fn contexte(q: &Questionnaire, h: &Hypotheses) -> Contexte {
     } else {
         0.0
     };
-    let denom = q.p_fin() + q.v_immo_loc;
-    let ratio = if denom > 0.0 { q.v_immo_loc / denom } else { 0.0 };
+    let denom = q.p_fin() + q.immo_locatif_net(h);
+    let ratio = if denom > 0.0 { q.immo_locatif_net(h) / denom } else { 0.0 };
     Contexte {
         base_eur: base,
         actuelle_pct,
@@ -126,7 +132,7 @@ fn pct(v: f64) -> String {
 }
 
 pub fn allocation_cible(q: &Questionnaire, h: &Hypotheses, ctx: &Contexte, profil_score: Profil) -> Cible {
-    let f = q.foyer();
+    let f = q.foyer(h);
     let mut aj = Vec::new();
     let mut profil = profil_score;
 

@@ -36,6 +36,7 @@ navigateur ──► web (nginx, non root) ──/api──► api (Rust/axum, d
 | Dossier | Contenu |
 |---|---|
 | `crates/engine` | Moteur de calcul en Rust : types d'entrée/sortie, poches 0/1/2, profils, modificateurs, garde-fous, répartition des flux, alertes. Testé unitairement. |
+| `crates/engine/src/sci.rs` | Fiscalité des SCI (IR et IS) ; la logique de plus-values de cession est dans `crates/engine/src/cession.rs`. |
 | `crates/wasm` | Le même moteur exposé en WebAssembly (`hypotheses`, `exemple`, `calculer`, en JSON) pour la version GitHub Pages. |
 | `crates/api` | API HTTP axum : `GET /api/hypotheses`, `GET /api/exemple`, `POST /api/calcul`, `GET /api/sante`. |
 | `web` | Front React + TypeScript (strict). Les types de `web/src/bindings` sont **générés depuis Rust** avec ts-rs : le contrat front/back est vérifié à la compilation. |
@@ -109,15 +110,68 @@ via `docker compose up`.
   pondérée par les revenus de chacun. L'âge de référence est celui de l'adulte le plus âgé
   (règle « 110 − âge »). Le temps de gestion retenu est le plus faible. L'abondement employeur
   compte dès qu'un adulte y a droit.
-- **Capacité d'épargne** = revenus − dépenses courantes − mensualités de crédit, sauf si un
-  montant est imposé. La précaution se calcule sur dépenses + mensualités.
+- **Capacité d'épargne** = revenus − dépenses courantes − mensualités des crédits **du foyer**
+  − effort à verser aux SCI déficitaires, sauf si un montant est imposé. La précaution se
+  calcule sur dépenses + mensualités.
 - **Projets datés** : même glide path et même formule PMT que les études. Leur montant est
   indexé sur une inflation de 2 % (modifiable). Si l'épargne ne suffit pas, les études
   (toujours « essentiel ») et les projets essentiels sont servis d'abord, puis les importants,
   puis les souhaitables, au prorata à l'intérieur d'un même niveau.
 - **Objectif revenus passifs** : il est jugé atteignable par simulation mois par mois.
   L'épargne comble d'abord la précaution et les crédits chers, puis finance les projets en cours.
-  Chaque projet arrivé à échéance libère son versement pour la poche 2.
+  L'épargne disponible varie dans le temps : un projet arrivé à échéance libère son versement,
+  un crédit du foyer qui se termine rend sa mensualité, et une vente verse son produit net.
+
+## Crédits, SCI et ventes
+
+### Crédits
+
+Un crédit se saisit avec son **taux**, son **restant dû**, sa **mensualité**, sa **durée
+restante**, son **objet** et, le cas échéant, la **SCI** qui le porte.
+
+- **Cohérence** : la mensualité théorique est recalculée à partir des trois autres valeurs.
+  Un écart de plus de 5 % est signalé (souvent l'assurance emprunteur ou un différé).
+- **Durée** : à la fin du crédit, la mensualité revient à l'épargne dans la projection. Sans
+  durée renseignée, le crédit est supposé courir jusqu'au bout, ce qui sous-estime l'épargne
+  future — l'outil le signale.
+- **Arbitrage** : le taux est comparé au rendement de la poche 2 *net de fiscalité*.
+  Au-dessus de 5 %, remboursement prioritaire (le flux mensuel y est affecté) ; entre le
+  rendement net et 5 %, l'arbitrage est signalé sans être imposé ; en dessous, garder le crédit
+  et investir. Un crédit locatif sous le rendement net est présenté comme un **levier**.
+- **Taux d'endettement** : deux chiffres. Celui du foyer (ses mensualités / ses revenus) et
+  celui qu'une banque calculera, crédits de SCI compris et loyers retenus à 70 %.
+
+### SCI
+
+Chaque SCI a son **régime**, sa **quote-part détenue par le foyer**, ses biens, ses SCPI, ses
+loyers et ses charges. Les crédits lui sont rattachés depuis l'étape Budget.
+
+- **À l'IR** : résultat foncier = loyers − charges − **intérêts** ; imposé à la TMI plus les
+  prélèvements sociaux. Le capital remboursé n'étant pas déductible, l'impôt peut dépasser la
+  trésorerie dégagée. Un déficit est signalé avec sa part imputable sur le revenu global.
+- **À l'IS** : le bien est amorti (85 % du prix sur 30 ans par défaut), ce qui écrase le
+  résultat ; IS à 15 % jusqu'à 42 500 € puis 25 %. Surtout, **le résultat non distribué n'est
+  pas un revenu passif du foyer** : il grossit le patrimoine mais ne réduit pas le capital à
+  constituer. La part distribuée est nette de PFU.
+- Une SCI dont la trésorerie est négative crée un **effort mensuel** à la charge du foyer, qui
+  vient en déduction de sa capacité d'épargne.
+
+### Ventes programmées
+
+Une vente porte sur le locatif direct ou sur une SCI, en totalité ou en partie. À l'échéance,
+le crédit est soldé, les loyers disparaissent de la projection (ce qui relève le capital à
+constituer) et le produit net entre dans la cascade habituelle.
+
+- **Particulier et SCI à l'IR** : plus-value = prix − prix d'acquisition, avec abattements pour
+  durée de détention — exonération d'impôt à 22 ans, de prélèvements sociaux à 30 ans — et
+  surtaxe au-delà de 50 000 €.
+- **SCI à l'IS** : plus-value = prix − **valeur nette comptable**. Les amortissements déduits
+  chaque année sont réintégrés, sans aucun abattement de durée : l'économie d'impôt annuelle se
+  paie à la revente, et l'outil chiffre l'écart.
+
+Limites assumées : pas de report de déficit d'un exercice sur l'autre, régime réel supposé
+(pas de micro-foncier), et la résidence principale n'est pas vendable dans l'outil (elle
+changerait aussi le budget logement).
 
 ## Choix d'interprétation de la spécification
 
@@ -128,7 +182,10 @@ Là où la spécification laisse une marge, voici ce que fait le moteur (tout es
   revenus stables, **4 mois** sinon.
   Un excédent de livrets est redéployé dans la poche 2.
 - **Dettes > 5 %** : le reste du flux mensuel y est affecté (dans la limite du restant dû),
-  avant les études et projets, comme dans l'ordre de la section 5.
+  avant les études et projets, comme dans l'ordre de la section 5. Entre le rendement net
+  attendu et ce seuil, l'arbitrage est seulement signalé.
+- **Revalorisation de l'immobilier** : 1 %/an pour estimer un prix de vente futur.
+- **Amortissement à l'IS** : 85 % du prix sur 30 ans (le terrain ne s'amortit pas).
 - **Frais d'études par défaut** : 3 000 €/an public, 10 000 €/an privé, 6 500 €/an mixte,
   9 000 €/an de logement. Le glide path s'applique en années entières : > 12 ans devient ≥ 13 ans.
   Un enfant de 18 ans ou plus a un horizon nul : aucun versement mensuel n'est calculé et le

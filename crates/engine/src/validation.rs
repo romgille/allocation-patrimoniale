@@ -69,6 +69,7 @@ pub fn valider(q: &Questionnaire, h: &Hypotheses) -> Result<(), Vec<String>> {
         ("Le revenu passif visé", q.r_cible),
         ("Les autres revenus passifs", q.autres_revenus_passifs),
         ("La valeur nette du locatif", q.v_immo_loc),
+        ("Les loyers bruts du locatif", q.loyers_immo_loc_mensuels),
         ("Les livrets", q.avoirs.livrets),
         ("Les liquidités à investir", q.avoirs.liquidites_a_investir),
         ("Les ETF monde", q.avoirs.etf_monde),
@@ -105,6 +106,66 @@ pub fn valider(q: &Questionnaire, h: &Hypotheses) -> Result<(), Vec<String>> {
         }
         montant(&mut e, &format!("Crédit « {} » : le restant dû", d.libelle), d.restant_du);
         montant(&mut e, &format!("Crédit « {} » : la mensualité", d.libelle), d.mensualite);
+        if d.duree_restante_mois > 600 {
+            e.push(format!("Crédit « {} » : durée restante ≤ 600 mois (50 ans).", d.libelle));
+        }
+        if let Some(id) = &d.sci_id {
+            if !q.scis.iter().any(|s| &s.id == id) {
+                e.push(format!("Crédit « {} » : la SCI rattachée n'existe pas.", d.libelle));
+            }
+        }
+    }
+
+    // --- SCI ---
+    if q.scis.len() > 10 {
+        e.push("10 SCI maximum.".into());
+    }
+    for (i, s) in q.scis.iter().enumerate() {
+        let n = if s.nom.trim().is_empty() { format!("SCI {}", i + 1) } else { s.nom.clone() };
+        if s.id.trim().is_empty() {
+            e.push(format!("{n} : identifiant manquant."));
+        }
+        if q.scis.iter().filter(|a| a.id == s.id).count() > 1 {
+            e.push(format!("{n} : deux SCI portent le même identifiant."));
+        }
+        if !(0.0..=100.0).contains(&s.part_foyer_pct) {
+            e.push(format!("{n} : la quote-part du foyer doit être entre 0 et 100 %."));
+        }
+        if !(0.0..=100.0).contains(&s.distribution_pct) {
+            e.push(format!("{n} : la part distribuée doit être entre 0 et 100 %."));
+        }
+        montant(&mut e, &format!("{n} : la valeur des biens"), s.valeur_biens);
+        montant(&mut e, &format!("{n} : la base d'amortissement"), s.base_amortissement);
+        montant(&mut e, &format!("{n} : les SCPI"), s.scpi);
+        montant(&mut e, &format!("{n} : les loyers"), s.loyers_mensuels);
+        montant(&mut e, &format!("{n} : les charges"), s.charges_mensuelles);
+    }
+
+    // --- Ventes immobilières ---
+    for (i, v) in q.ventes.iter().enumerate() {
+        let n = if v.libelle.trim().is_empty() { format!("Vente {}", i + 1) } else { v.libelle.clone() };
+        if v.dans_ans > 40 {
+            e.push(format!("{n} : échéance ≤ 40 ans."));
+        }
+        if !(0.0..=100.0).contains(&v.part_vendue_pct) {
+            e.push(format!("{n} : la part vendue doit être entre 0 et 100 %."));
+        }
+        if !(0.0..=20.0).contains(&v.frais_vente_pct) {
+            e.push(format!("{n} : les frais de vente doivent être entre 0 et 20 %."));
+        }
+        if v.detention_ans > 80 {
+            e.push(format!("{n} : durée de détention ≤ 80 ans."));
+        }
+        montant(&mut e, &format!("{n} : le prix de vente"), v.prix_vente);
+        montant(&mut e, &format!("{n} : le prix d'acquisition"), v.prix_acquisition);
+        if let crate::model::BienVendu::Sci { id } = &v.bien {
+            if !q.scis.iter().any(|s| &s.id == id) {
+                e.push(format!("{n} : la SCI vendue n'existe pas."));
+            }
+        }
+        if q.ventes.iter().filter(|a| a.bien == v.bien).count() > 1 {
+            e.push(format!("{n} : ce bien fait l'objet de plusieurs ventes."));
+        }
     }
 
     // --- Hypothèses ---
@@ -115,6 +176,7 @@ pub fn valider(q: &Questionnaire, h: &Hypotheses) -> Result<(), Vec<String>> {
         ("Rendement sécurisé", h.rendement_securise),
         ("Seuil taux de dette", h.seuil_taux_dette),
         ("Endettement max", h.endettement_max),
+        ("Écart maximal de mensualité", h.ecart_mensualite_max),
         ("Plafond actions (tolérance faible)", h.actions_max_tolerance_faible),
         ("Plancher fonds euros", h.plancher_fonds_euros),
         ("Plancher fonds euros horizon court", h.plancher_fonds_euros_horizon_court),
@@ -131,8 +193,25 @@ pub fn valider(q: &Questionnaire, h: &Hypotheses) -> Result<(), Vec<String>> {
         ("PFU", h.pfu),
         ("Prélèvements sociaux", h.prelevements_sociaux),
         ("Plafond PER", h.plafond_per_revenus),
+        ("Part amortissable", h.part_amortissable),
+        ("Taux IS réduit", h.is_taux_reduit),
+        ("Taux IS normal", h.is_taux_normal),
+        ("Pondération des loyers bancaires", h.ponderation_loyers_bancaire),
+        ("Taux de plus-value immobilière", h.taux_pv_immobiliere),
     ] {
         fraction(&mut e, nom, v);
+    }
+    for (nom, v) in [
+        ("Seuil de bénéfice du taux IS réduit", h.is_seuil_taux_reduit),
+        ("Plafond de déficit foncier", h.deficit_foncier_max),
+    ] {
+        montant(&mut e, nom, v);
+    }
+    if !h.revalorisation_immobilier.is_finite() || h.revalorisation_immobilier <= -1.0 {
+        e.push("La revalorisation immobilière doit être finie et supérieure à -100 %.".into());
+    }
+    if h.duree_amortissement_ans == 0 {
+        e.push("La durée d'amortissement doit être positive.".into());
     }
     if h.or_min > h.or_max {
         e.push("Or min doit être ≤ or max.".into());

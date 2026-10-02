@@ -15,6 +15,55 @@ pub enum Gravite {
     Critique,
 }
 
+/// Que faire d'un crédit, une fois son taux comparé au rendement attendu de la poche 2.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum VerdictCredit {
+    /// Taux élevé : le remboursement anticipé est un placement sans risque équivalent.
+    Rembourser,
+    /// Taux entre le rendement net attendu et le seuil : choix personnel.
+    Arbitrer,
+    /// Taux inférieur au rendement net attendu : garder le crédit et investir.
+    Conserver,
+    /// Crédit peu coûteux adossé à un bien qui produit des revenus : c'est du levier.
+    Levier,
+}
+
+impl VerdictCredit {
+    pub fn libelle(self) -> &'static str {
+        match self {
+            VerdictCredit::Rembourser => "Rembourser en priorité",
+            VerdictCredit::Arbitrer => "Arbitrage à faire",
+            VerdictCredit::Conserver => "Conserver et investir",
+            VerdictCredit::Levier => "Levier utile",
+        }
+    }
+}
+
+/// Lecture d'un crédit : coût réel, cohérence de la saisie et arbitrage.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct AnalyseCredit {
+    pub libelle: String,
+    pub objet_libelle: String,
+    /// « Foyer » ou le nom de la SCI qui porte le crédit.
+    pub porte_par: String,
+    pub taux_pct: f64,
+    pub restant_du_eur: f64,
+    pub mensualite_eur: f64,
+    pub duree_restante_mois: u32,
+    /// Intérêts restant à payer jusqu'au terme.
+    pub interets_restants_eur: f64,
+    /// Mensualité recalculée à partir du taux, du restant dû et de la durée.
+    pub mensualite_theorique_eur: f64,
+    /// Faux si la mensualité saisie s'écarte trop de la mensualité théorique.
+    pub coherent: bool,
+    pub verdict: VerdictCredit,
+    pub verdict_libelle: String,
+    pub commentaire: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Alerte {
@@ -244,8 +293,30 @@ pub struct Synthese {
     pub p_fin_eur: f64,
     pub v_immo_loc_eur: f64,
     pub ratio_immo_locatif: f64,
+    /// Mensualités du foyer / revenus du foyer.
     pub taux_endettement: f64,
+    /// Vue bancaire : crédits de SCI compris, loyers pondérés ajoutés aux revenus.
+    pub taux_endettement_bancaire: f64,
     pub tmi_pct: u8,
+}
+
+/// Patrimoine immobilier : détention directe, SCI et ventes programmées.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Immobilier {
+    pub locatif_direct_net_eur: f64,
+    pub cash_flow_direct_mensuel_eur: f64,
+    pub scis: Vec<crate::sci::BilanSci>,
+    /// Somme des valeurs nettes, quote-part du foyer.
+    pub total_net_eur: f64,
+    /// Revenu passif immobilier réellement perçu par le foyer.
+    pub cash_flow_total_mensuel_eur: f64,
+    /// Effort d'épargne mensuel absorbé par les SCI en trésorerie négative.
+    pub effort_scis_mensuel_eur: f64,
+    /// Résultat conservé chaque année dans les SCI à l'IS (patrimoine, pas revenu).
+    pub capitalise_scis_annuel_eur: f64,
+    pub ventes: Vec<crate::cession::Cession>,
+    pub credits: Vec<AnalyseCredit>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -253,6 +324,7 @@ pub struct Synthese {
 pub struct Resultat {
     pub synthese: Synthese,
     pub budget: Budget,
+    pub immobilier: Immobilier,
     pub poche_0: Poche0,
     pub poche_1: Vec<SousPoche>,
     pub poche_2: Poche2,
