@@ -130,7 +130,10 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
     let (cash_flow_foyer, capitalise) = match sci.regime {
         RegimeSci::Ir => ((tresorerie * part - impot_foyer).max(f64::MIN), 0.0),
         RegimeSci::Is => {
-            let resultat_comptable_apres_is = (loyers - charges - interets - impot_societe).max(0.0);
+            // Les dividendes se prélèvent sur le résultat comptable, qui est après
+            // amortissement : sans bénéfice, rien ne peut être distribué.
+            let resultat_comptable_apres_is =
+                (loyers - charges - interets - amortissement - impot_societe).max(0.0);
             let distribuable = resultat_comptable_apres_is.min(tresorerie.max(0.0));
             let distribue = distribuable * (sci.distribution_pct / 100.0).clamp(0.0, 1.0);
             let net = distribue * part * (1.0 - h.pfu);
@@ -251,9 +254,27 @@ mod tests {
         s2.distribution_pct = 100.0;
         let b2 = bilan(&s2, &[credit()], Tmi::T30, &h);
         assert!(b2.cash_flow_foyer_mensuel_eur > 0.0);
-        // Distribution nette de PFU.
-        assert!((b2.cash_flow_foyer_mensuel_eur * 12.0 - b2.tresorerie_annuelle_eur * (1.0 - h.pfu)).abs() < 1.0);
+        // Distribution nette de PFU, limitée au résultat comptable (après amortissement).
+        let benefice = 36_000.0 - 3_600.0 - b2.interets_annuels_eur - b2.amortissement_annuel_eur;
+        let benefice = benefice - impot_societes(b2.resultat_imposable_eur, &h);
+        assert!(benefice < b2.tresorerie_annuelle_eur);
+        assert!((b2.cash_flow_foyer_mensuel_eur * 12.0 - benefice * (1.0 - h.pfu)).abs() < 1.0);
         assert_eq!(b2.capitalise_annuel_eur, 0.0);
+    }
+
+    #[test]
+    fn is_pas_de_dividende_sans_benefice_comptable() {
+        let h = Hypotheses::default();
+        let mut s = sci(RegimeSci::Is);
+        s.distribution_pct = 100.0;
+        s.loyers_mensuels = 1_300.0;
+        let mut c = credit();
+        c.mensualite = 700.0;
+        // Trésorerie positive (≈ 3 600 €), mais l'amortissement de 8 500 € rend le
+        // résultat comptable négatif.
+        let b = bilan(&s, &[c], Tmi::T30, &h);
+        assert!(b.tresorerie_annuelle_eur > 0.0);
+        assert_eq!(b.cash_flow_foyer_mensuel_eur, 0.0);
     }
 
     #[test]
