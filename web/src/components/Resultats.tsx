@@ -17,13 +17,14 @@ function BudgetFoyer({ b }: { b: Budget }) {
   const segments: SegmentFlux[] = [
     { cle: 'depenses', libelle: 'Dépenses courantes', valeur: b.total_depenses_eur, serie: 4 },
     { cle: 'credits', libelle: 'Mensualités de crédit', valeur: b.mensualites_credits_eur, serie: 3 },
+    { cle: 'locatif', libelle: 'Effort du locatif en direct', valeur: b.effort_locatif_eur, serie: 2 },
     { cle: 'epargne', libelle: 'Épargne retenue', valeur: b.epargne_retenue_eur, serie: 1 },
     { cle: 'reste', libelle: 'Marge non épargnée', valeur: b.non_affecte_eur, serie: 'neutre' },
   ]
   return (
     <section className="bloc">
       <h2>Budget du foyer — {eur(b.total_revenus_eur)} de revenus par mois</h2>
-      <FluxBar segments={segments} total={Math.max(b.total_revenus_eur, b.total_depenses_eur + b.mensualites_credits_eur)} />
+      <FluxBar segments={segments} total={Math.max(b.total_revenus_eur, b.total_depenses_eur + b.mensualites_credits_eur + b.effort_locatif_eur)} />
       {deficit > 0 && <p className="ko">Déficit mensuel : {eur(deficit)}</p>}
       <div className="deux-colonnes">
         <div>

@@ -14,8 +14,8 @@ pub fn poche0(q: &Questionnaire, f: &Foyer, h: &Hypotheses) -> Poche0 {
     } else {
         h.precaution_mois_defaut
     };
-    // Les dépenses de référence incluent les mensualités de crédit.
-    let cible_eur = cible_mois * (f.depenses + f.mensualites);
+    // Les dépenses de référence incluent les mensualités de crédit et l'effort du locatif en direct.
+    let cible_eur = cible_mois * (f.depenses + f.mensualites + f.effort_locatif);
     let existant = q.avoirs.livrets;
     let mut supports = Vec::new();
     if q.lep_eligible {
@@ -185,6 +185,18 @@ mod tests {
             duree_etudes: 5,
             capital_deja_affecte: 0.0,
         }
+    }
+
+    #[test]
+    fn la_reserve_inclut_l_effort_locatif() {
+        let h = Hypotheses::default();
+        let mut q = Questionnaire::exemple();
+        let avant = q.foyer(&h);
+        let p_avant = poche0(&q, &avant, &h);
+        q.cf_immo = -150.0;
+        let f = q.foyer(&h);
+        let p = poche0(&q, &f, &h);
+        assert!((p.cible_eur - p_avant.cible_eur - p.cible_mois * 150.0).abs() < 1e-6);
     }
 
     #[test]

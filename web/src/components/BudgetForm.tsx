@@ -39,10 +39,14 @@ export function BudgetForm({ q, onChange }: Props) {
   const revenus = somme(q.adultes.flatMap((a) => a.revenus.map((r) => r.montant_mensuel)))
   const depenses = somme(q.depenses.map((d) => d.montant_mensuel))
   // Seuls les crédits du foyer pèsent sur sa capacité d'épargne : ceux des SCI sont
-  // remboursés par les loyers (l'éventuel effort à combler apparaît dans les résultats).
-  const mensualites = somme(q.dettes.filter((d) => d.sci_id === null).map((d) => d.mensualite))
+  // remboursés par les loyers (l'éventuel effort à combler apparaît dans les résultats), de
+  // même que ceux du locatif en direct, dont le cash-flow est saisi net de crédit.
+  const mensualites = somme(
+    q.dettes.filter((d) => d.sci_id === null && d.objet !== 'locatif').map((d) => d.mensualite),
+  )
   const mensualitesScis = somme(q.dettes.filter((d) => d.sci_id !== null).map((d) => d.mensualite))
-  const capacite = revenus - depenses - mensualites
+  const effortLocatif = Math.max(0, -q.cf_immo)
+  const capacite = revenus - depenses - mensualites - effortLocatif
 
   const majRevenus = (i: number, revenus: Revenu[]) =>
     set(
@@ -151,6 +155,12 @@ export function BudgetForm({ q, onChange }: Props) {
         <strong>{eur(depenses)}</strong>
         <span>− Mensualités de crédit du foyer</span>
         <strong>{eur(mensualites)}</strong>
+        {effortLocatif > 0 && (
+          <>
+            <span>− Effort du locatif en direct</span>
+            <strong>{eur(effortLocatif)}</strong>
+          </>
+        )}
         <span className="total">= Capacité d'épargne avant effort SCI</span>
         <strong className={`total ${capacite < 0 ? 'ko' : ''}`}>{eur(capacite)}</strong>
       </div>
@@ -212,7 +222,7 @@ function DettesForm({
                 value={d.objet}
                 options={OBJETS_CREDIT}
                 onChange={(v) => maj(i, { objet: v })}
-                aide="Un crédit locatif à taux bas est un levier, pas une dette à solder."
+                aide="Un crédit locatif à taux bas est un levier, pas une dette à solder. Sa mensualité est supposée déjà comprise dans le cash-flow net du locatif (étape Patrimoine) : elle n'est pas déduite deux fois du budget."
               />
               <NumberField label="Taux" unite="%" value={d.taux_pct} onChange={(v) => maj(i, { taux_pct: v })} min={0} max={30} />
               <NumberField label="Restant dû" unite="€" value={d.restant_du} onChange={(v) => maj(i, { restant_du: v })} min={0} />

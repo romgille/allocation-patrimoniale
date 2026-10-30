@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn vente_en_direct_apres_longue_detention() {
         let h = Hypotheses::default();
-        let q = q_avec_vente(VenteImmobiliere {
+        let mut q = q_avec_vente(VenteImmobiliere {
             libelle: "Vente".into(),
             bien: BienVendu::LocatifDirect,
             dans_ans: 0,
@@ -304,6 +304,7 @@ mod tests {
             frais_vente_pct: 0.0,
             apports_restituables: 0.0,
         });
+        q.dettes.retain(|d| d.sci_id.is_some());
         let c = cession(&q, &q.ventes[0], &h);
         assert_eq!(c.impot_eur, 0.0);
         assert!((c.produit_net_eur - 200_000.0).abs() < 1.0);

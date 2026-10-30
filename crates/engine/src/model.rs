@@ -455,8 +455,11 @@ pub struct Foyer {
     pub abondement_employeur: bool,
     pub revenus: f64,
     pub depenses: f64,
-    /// Mensualités des crédits portés par le foyer (hors crédits de SCI).
+    /// Mensualités des crédits du foyer pesant sur son budget : hors crédits de SCI et hors
+    /// crédits du locatif en direct, dont la mensualité est déjà dans `cf_immo` (net de crédit).
     pub mensualites: f64,
+    /// Effort d'épargne mensuel à apporter au locatif en direct si son cash-flow net est négatif.
+    pub effort_locatif: f64,
     /// Effort d'épargne mensuel à apporter aux SCI dont la trésorerie est négative.
     pub effort_scis: f64,
     pub capacite_calculee: f64,
@@ -468,6 +471,12 @@ impl Questionnaire {
     /// Crédits portés par le foyer lui-même (hors SCI).
     pub fn dettes_foyer(&self) -> impl Iterator<Item = &Dette> {
         self.dettes.iter().filter(|d| d.sci_id.is_none())
+    }
+
+    /// Crédits du foyer dont la mensualité pèse directement sur son budget : le crédit du
+    /// locatif en direct en est exclu, car `cf_immo` est saisi net de crédit.
+    pub fn dettes_budget(&self) -> impl Iterator<Item = &Dette> {
+        self.dettes_foyer().filter(|d| d.objet != ObjetCredit::Locatif)
     }
 
     /// Crédits portés par les SCI.
@@ -483,11 +492,12 @@ impl Questionnaire {
     pub fn foyer(&self, h: &Hypotheses) -> Foyer {
         let revenus = self.adultes.iter().map(Adulte::revenu_total).fold(0.0, |a, b| a + b);
         let depenses = self.depenses.iter().map(|d| d.montant_mensuel).fold(0.0, |a, b| a + b);
-        let mensualites = self.dettes_foyer().map(|d| d.mensualite).fold(0.0, |a, b| a + b);
+        let mensualites = self.dettes_budget().map(|d| d.mensualite).fold(0.0, |a, b| a + b);
+        let effort_locatif = (-self.cf_immo).max(0.0);
         // Une SCI dont la trésorerie ne couvre pas son crédit est comblée par le foyer :
         // c'est autant d'épargne en moins.
         let effort_scis = self.bilans_scis(h).iter().map(|b| b.effort_mensuel_eur).fold(0.0, |a, b| a + b);
-        let capacite = revenus - depenses - mensualites - effort_scis;
+        let capacite = revenus - depenses - mensualites - effort_locatif - effort_scis;
         let stab_ponderee = if revenus > 0.0 {
             self.adultes.iter().map(|a| a.stab_revenus as f64 * a.revenu_total()).sum::<f64>() / revenus
         } else if self.adultes.is_empty() {
@@ -511,6 +521,7 @@ impl Questionnaire {
             revenus,
             depenses,
             mensualites,
+            effort_locatif,
             effort_scis,
             capacite_calculee: capacite,
             e_mois: self.epargne_mensuelle_forcee.unwrap_or(capacite).max(0.0),
@@ -610,9 +621,11 @@ impl Questionnaire {
                 crypto: 0.0,
                 private_equity: 0.0,
             },
-            v_immo_loc: 30_000.0,
+            // Appartement locatif : valeur 190 000 € − crédit 120 000 € = 70 000 € nets ;
+            // 1 000 € de loyers − 773 € de mensualité − 127 € de charges = 100 €.
+            v_immo_loc: 70_000.0,
             cf_immo: 100.0,
-            loyers_immo_loc_mensuels: 900.0,
+            loyers_immo_loc_mensuels: 1_000.0,
             scis: vec![Sci {
                 id: "sci-1".into(),
                 nom: "SCI du Moulin".into(),
@@ -645,6 +658,15 @@ impl Questionnaire {
                     mensualite: 1_050.0,
                     duree_restante_mois: 168,
                     objet: ObjetCredit::ResidencePrincipale,
+                    sci_id: None,
+                },
+                Dette {
+                    libelle: "Crédit appartement locatif".into(),
+                    taux_pct: 2.0,
+                    restant_du: 120_000.0,
+                    mensualite: 773.0,
+                    duree_restante_mois: 180,
+                    objet: ObjetCredit::Locatif,
                     sci_id: None,
                 },
                 Dette {
@@ -696,13 +718,18 @@ impl Questionnaire {
             + self.bilans_scis(h).iter().map(|b| b.cash_flow_foyer_mensuel_eur.max(0.0)).fold(0.0, |a, b| a + b)
     }
 
+    /// Toutes les mensualités portées par le foyer, locatif en direct compris.
+    fn mensualites_foyer_totales(&self) -> f64 {
+        self.dettes_foyer().map(|d| d.mensualite).fold(0.0, |a, b| a + b)
+    }
+
     /// Taux d'endettement du foyer : ses seules mensualités rapportées à ses revenus.
     pub fn taux_endettement(&self, h: &Hypotheses) -> f64 {
         let f = self.foyer(h);
         if f.revenus <= 0.0 {
             return 0.0;
         }
-        f.mensualites / f.revenus
+        self.mensualites_foyer_totales() / f.revenus
     }
 
     /// Taux d'endettement au sens bancaire : toutes les mensualités, y compris celles des
@@ -719,7 +746,7 @@ impl Questionnaire {
         if revenus <= 0.0 {
             return 0.0;
         }
-        (f.mensualites + mensualites_scis) / revenus
+        (self.mensualites_foyer_totales() + mensualites_scis) / revenus
     }
 }
 
@@ -749,6 +776,33 @@ mod tests {
         assert!((f.e_mois - f.capacite_calculee).abs() < 1e-9);
         // (3 × 3200 + 2 × 2600) / 5800
         assert!((f.stab_ponderee - 14_800.0 / 5_800.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn credit_du_locatif_direct_pas_compte_deux_fois() {
+        let h = Hypotheses::default();
+        let mut q = Questionnaire::exemple();
+        let avant = q.foyer(&h);
+        q.dettes.push(Dette {
+            libelle: "Crédit locatif".into(),
+            taux_pct: 2.0,
+            restant_du: 100_000.0,
+            mensualite: 600.0,
+            duree_restante_mois: 120,
+            objet: ObjetCredit::Locatif,
+            sci_id: None,
+        });
+        // cf_immo est déjà net de ce crédit : la capacité d'épargne ne change pas.
+        let f = q.foyer(&h);
+        assert!((f.capacite_calculee - avant.capacite_calculee).abs() < 1e-9);
+        assert!((f.mensualites - avant.mensualites).abs() < 1e-9);
+        // Un cash-flow négatif, lui, est un effort pour le foyer.
+        q.cf_immo = -150.0;
+        let f = q.foyer(&h);
+        assert!((f.effort_locatif - 150.0).abs() < 1e-9);
+        assert!((f.capacite_calculee - (avant.capacite_calculee - 150.0)).abs() < 1e-9);
+        // Le taux d'endettement, lui, compte bien cette mensualité.
+        assert!(q.taux_endettement(&h) > Questionnaire::exemple().taux_endettement(&h));
     }
 
     #[test]

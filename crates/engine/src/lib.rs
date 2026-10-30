@@ -347,6 +347,7 @@ fn budget(q: &Questionnaire, f: &Foyer) -> Budget {
         postes,
         total_depenses_eur: f.depenses,
         mensualites_credits_eur: f.mensualites,
+        effort_locatif_eur: f.effort_locatif,
         capacite_calculee_eur: f.capacite_calculee,
         epargne_retenue_eur: f.e_mois,
         epargne_forcee: q.epargne_mensuelle_forcee.is_some(),
@@ -412,6 +413,12 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
             pct(synthese.taux_endettement),
             pct(synthese.taux_endettement_bancaire),
             pct(h.ponderation_loyers_bancaire)
+        )));
+    }
+    if f.effort_locatif > 0.0 {
+        alertes.push(Alerte::attention(format!(
+            "Le locatif en direct a un cash-flow négatif : {} par mois à la charge du foyer, déduits de sa capacité d'épargne.",
+            eur(f.effort_locatif)
         )));
     }
     if f.effort_scis > 0.0 {
@@ -549,27 +556,42 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
 
     // Épargne libérée au fil du temps : fin des crédits du foyer, fin de l'effort sur une
     // SCI vendue, et mensualités que la vente d'un bien fait disparaître.
-    let vente_directe = q.ventes.iter().find(|v| matches!(&v.bien, BienVendu::LocatifDirect));
     let mut liberations: Vec<(u32, f64)> = q
-        .dettes_foyer()
-        .filter(|d| {
-            vente_directe.is_none()
-                || d.objet != ObjetCredit::Locatif
-                || d.fin_mois().is_some_and(|fin| fin <= vente_directe.unwrap().dans_ans * 12)
-        })
+        .dettes_budget()
         .filter_map(|d| d.fin_mois().map(|fin| (fin, d.mensualite)))
         .collect();
+    // Effort du locatif direct : il baisse à chaque fin de crédit locatif (à hauteur de la
+    // mensualité, sans jamais devenir négatif) et de la part vendue du bien.
+    let fins_locatif: Vec<(u32, f64)> = q
+        .dettes_foyer()
+        .filter(|d| d.objet == ObjetCredit::Locatif)
+        .filter_map(|d| d.fin_mois().map(|fin| (fin, d.mensualite)))
+        .collect();
+    let ventes_locatif: Vec<(u32, f64)> = q
+        .ventes
+        .iter()
+        .filter(|v| matches!(v.bien, BienVendu::LocatifDirect))
+        .map(|v| (v.dans_ans * 12, v.part_vendue()))
+        .collect();
+    let mut mois_evenements: Vec<u32> =
+        fins_locatif.iter().map(|(m, _)| *m).chain(ventes_locatif.iter().map(|(m, _)| *m)).collect();
+    mois_evenements.sort_unstable();
+    mois_evenements.dedup();
+    let effort_a = |mois: u32| -> f64 {
+        let termine: f64 = fins_locatif.iter().filter(|(m, _)| *m <= mois).map(|(_, e)| e).sum();
+        let reste: f64 = ventes_locatif.iter().filter(|(m, _)| *m <= mois).map(|(_, p)| 1.0 - p).product();
+        (f.effort_locatif - termine).max(0.0) * reste
+    };
+    let mut effort_precedent = f.effort_locatif;
+    for m in mois_evenements {
+        let effort = effort_a(m);
+        liberations.push((m, effort_precedent - effort));
+        effort_precedent = effort;
+    }
     let bilans = q.bilans_scis(h);
-    for (v, c) in q.ventes.iter().zip(ventes.iter()) {
+    for v in &q.ventes {
         match &v.bien {
-            BienVendu::LocatifDirect => {
-                liberations.push((v.dans_ans * 12, c.mensualites_liberees_eur));
-                for d in q.dettes_foyer().filter(|d| d.objet == ObjetCredit::Locatif) {
-                    if let Some(fin) = d.fin_mois() {
-                        liberations.push((fin, d.mensualite * (1.0 - v.part_vendue())));
-                    }
-                }
-            }
+            BienVendu::LocatifDirect => {}
             BienVendu::Sci { id } => {
             if let Some(b) = bilans.iter().find(|b| &b.id == id) {
                 liberations.push((v.dans_ans * 12, b.effort_mensuel_eur * v.part_vendue()));
@@ -598,7 +620,7 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
 
     let sim = Simulation {
         capital: capital_fin,
-        e_mois: f.e_mois,
+        e_mois: q.epargne_mensuelle_forcee.map_or(f.capacite_calculee, |e| e.max(0.0)),
         a_combler: p0.manque_eur + du_cher,
         poches: &p1,
         rendement,
@@ -1133,7 +1155,8 @@ mod tests {
 
     #[test]
     fn crowdfunding_excessif_gele() {
-        let q = Questionnaire::exemple(); // 9 k€ de crowdfunding sur ~108 k€
+        let mut q = Questionnaire::exemple();
+        q.avoirs.crowdfunding_immo = 15_000.0; // nettement au-dessus de 5 % du patrimoine
         let r = calculer(&q, &Hypotheses::default());
         let cf = r.poche_2.lignes.iter().find(|l| l.ligne == Ligne::Crowdfunding).unwrap();
         assert!(cf.gelee);
@@ -1222,6 +1245,30 @@ mod tests {
     }
 
     #[test]
+    fn la_fin_d_un_credit_locatif_libere_l_effort_restant() {
+        let h = Hypotheses::default();
+        let mut q = q_simple();
+        q.enfants.clear();
+        q.projets.clear();
+        q.h_fire = 20;
+        q.cf_immo = -150.0;
+        let credit = |duree| Dette {
+            libelle: "Crédit locatif".into(),
+            taux_pct: 2.0,
+            restant_du: 30_000.0,
+            mensualite: 600.0,
+            duree_restante_mois: duree,
+            objet: ObjetCredit::Locatif,
+            sci_id: None,
+        };
+        q.dettes = vec![credit(0)];
+        let sans_duree = calculer(&q, &h).poche_2.capital_projete_eur;
+        q.dettes = vec![credit(12)];
+        let avec_duree = calculer(&q, &h).poche_2.capital_projete_eur;
+        assert!(avec_duree > sans_duree);
+    }
+
+    #[test]
     fn arbitrage_rembourser_ou_investir() {
         let h = Hypotheses::default();
         let mut q = q_simple();
@@ -1293,7 +1340,7 @@ mod tests {
         assert!(approx(r.budget.mensualites_credits_eur, 1_050.0, 1e-9));
         // … mais elle compte dans la vue bancaire, plus élevée que le taux du foyer seul.
         assert!(r.synthese.taux_endettement_bancaire > r.synthese.taux_endettement);
-        assert_eq!(r.immobilier.credits.len(), 2);
+        assert_eq!(r.immobilier.credits.len(), 3);
         assert!(r.immobilier.credits.iter().any(|c| c.porte_par == "SCI du Moulin"));
     }
 
@@ -1336,6 +1383,7 @@ mod tests {
         q.h_fire = 10;
         q.cf_immo = 400.0;
         q.v_immo_loc = 150_000.0;
+        q.dettes.retain(|d| d.objet != ObjetCredit::Locatif || d.sci_id.is_some());
 
         let sans_vente = calculer(&q, &h);
         q.ventes = vec![VenteImmobiliere {
