@@ -39,6 +39,8 @@ pub struct BilanSci {
     pub interets_annuels_eur: f64,
     /// IS : dotation aux amortissements de l'exercice.
     pub amortissement_annuel_eur: f64,
+    /// IS : intérêts annuels versés aux associés sur leur compte courant (société entière).
+    pub interets_compte_associes_annuels_eur: f64,
     /// Assiette imposable : résultat foncier (IR) ou résultat fiscal (IS).
     pub resultat_imposable_eur: f64,
     pub impot_annuel_eur: f64,
@@ -92,6 +94,26 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
         _ => 0.0,
     };
 
+    // Compte courant d'associés (IS uniquement) : les intérêts sont une charge de la société,
+    // déductible dans la limite du taux maximal légal ; ils sont un revenu pour les associés.
+    let (interets_associes, interets_associes_deductibles) = match sci.regime {
+        RegimeSci::Is => {
+            let taux = (sci.compte_associes_taux_pct / 100.0).max(0.0);
+            (
+                sci.compte_associes * taux,
+                sci.compte_associes * taux.min(h.taux_max_compte_associes),
+            )
+        }
+        RegimeSci::Ir => (0.0, 0.0),
+    };
+    if interets_associes > interets_associes_deductibles + 0.5 {
+        commentaires.push(format!(
+            "Le taux du compte d'associés dépasse le taux maximal déductible de {} : {} d'intérêts ne sont pas déductibles de l'IS, mais restent imposés chez les associés.",
+            crate::pct_public(h.taux_max_compte_associes),
+            eur(interets_associes - interets_associes_deductibles)
+        ));
+    }
+
     let (resultat, impot_societe, impot_foyer) = match sci.regime {
         RegimeSci::Ir => {
             let resultat = loyers - charges - interets;
@@ -111,7 +133,7 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
             (resultat, 0.0, impot * part)
         }
         RegimeSci::Is => {
-            let resultat = loyers - charges - interets - amortissement;
+            let resultat = loyers - charges - interets - amortissement - interets_associes_deductibles;
             let is = impot_societes(resultat, h);
             if resultat <= 0.0 && loyers > 0.0 {
                 commentaires.push(
@@ -125,7 +147,7 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
 
     // Trésorerie de la société : le capital remboursé sort de la trésorerie sans être
     // une charge déductible, l'amortissement est une charge sans sortie de trésorerie.
-    let tresorerie = loyers - charges - annuites - impot_societe;
+    let tresorerie = loyers - charges - annuites - interets_associes - impot_societe;
 
     let (cash_flow_foyer, capitalise) = match sci.regime {
         RegimeSci::Ir => ((tresorerie * part - impot_foyer).max(f64::MIN), 0.0),
@@ -133,10 +155,11 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
             // Les dividendes se prélèvent sur le résultat comptable, qui est après
             // amortissement : sans bénéfice, rien ne peut être distribué.
             let resultat_comptable_apres_is =
-                (loyers - charges - interets - amortissement - impot_societe).max(0.0);
+                (loyers - charges - interets - amortissement - interets_associes - impot_societe).max(0.0);
             let distribuable = resultat_comptable_apres_is.min(tresorerie.max(0.0));
             let distribue = distribuable * (sci.distribution_pct / 100.0).clamp(0.0, 1.0);
-            let net = distribue * part * (1.0 - h.pfu);
+            // Les intérêts du compte d'associés sont versés avant tout dividende, taxés au PFU.
+            let net = (distribue + interets_associes) * part * (1.0 - h.pfu);
             if distribue < distribuable - 0.5 {
                 commentaires.push(format!(
                     "{} restent dans la SCI : ils font grossir le patrimoine mais ne comptent pas comme revenu passif tant qu'ils ne sont pas distribués (PFU de {} à la distribution).",
@@ -167,6 +190,7 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
         charges_annuelles_eur: charges,
         interets_annuels_eur: interets,
         amortissement_annuel_eur: amortissement,
+        interets_compte_associes_annuels_eur: interets_associes,
         resultat_imposable_eur: resultat,
         impot_annuel_eur: impot_societe + impot_foyer,
         tresorerie_annuelle_eur: tresorerie,
@@ -196,6 +220,8 @@ mod tests {
             loyers_mensuels: 1_500.0,
             charges_mensuelles: 300.0,
             distribution_pct: 0.0,
+            compte_associes: 0.0,
+            compte_associes_taux_pct: 0.0,
         }
     }
 
@@ -275,6 +301,29 @@ mod tests {
         let b = bilan(&s, &[c], Tmi::T30, &h);
         assert!(b.tresorerie_annuelle_eur > 0.0);
         assert_eq!(b.cash_flow_foyer_mensuel_eur, 0.0);
+    }
+
+    #[test]
+    fn compte_associes_interets_deductibles_dans_la_limite() {
+        let h = Hypotheses::default();
+        let mut s = sci(RegimeSci::Is);
+        s.loyers_mensuels = 3_000.0;
+        let sans = bilan(&s, &[credit()], Tmi::T30, &h);
+        s.compte_associes = 100_000.0;
+        s.compte_associes_taux_pct = 6.0;
+        let avec = bilan(&s, &[credit()], Tmi::T30, &h);
+        assert!((avec.interets_compte_associes_annuels_eur - 6_000.0).abs() < 1e-6);
+        // Déductible seulement jusqu'au taux maximal (4,33 % par défaut).
+        let deductible = 100_000.0 * h.taux_max_compte_associes;
+        assert!((sans.resultat_imposable_eur - avec.resultat_imposable_eur - deductible).abs() < 1e-6);
+        assert!(avec.commentaires.iter().any(|c| c.contains("taux maximal déductible")));
+        // Les intérêts sont versés au foyer (nets de PFU) même sans dividende.
+        assert!((avec.cash_flow_foyer_mensuel_eur * 12.0 - 6_000.0 * (1.0 - h.pfu)).abs() < 1.0);
+        // À l'IR, le compte d'associés est ignoré.
+        let mut ir = sci(RegimeSci::Ir);
+        ir.compte_associes = 100_000.0;
+        ir.compte_associes_taux_pct = 6.0;
+        assert_eq!(bilan(&ir, &[credit()], Tmi::T30, &h).interets_compte_associes_annuels_eur, 0.0);
     }
 
     #[test]

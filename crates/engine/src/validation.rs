@@ -136,6 +136,10 @@ pub fn valider(q: &Questionnaire, h: &Hypotheses) -> Result<(), Vec<String>> {
         }
         montant(&mut e, &format!("{n} : la valeur des biens"), s.valeur_biens);
         montant(&mut e, &format!("{n} : la base d'amortissement"), s.base_amortissement);
+        montant(&mut e, &format!("{n} : le compte d'associés"), s.compte_associes);
+        if !(0.0..=30.0).contains(&s.compte_associes_taux_pct) {
+            e.push(format!("{n} : le taux du compte d'associés doit être entre 0 et 30 %."));
+        }
         montant(&mut e, &format!("{n} : les SCPI"), s.scpi);
         montant(&mut e, &format!("{n} : les loyers"), s.loyers_mensuels);
         montant(&mut e, &format!("{n} : les charges"), s.charges_mensuelles);
@@ -194,6 +198,7 @@ pub fn valider(q: &Questionnaire, h: &Hypotheses) -> Result<(), Vec<String>> {
         ("Prélèvements sociaux", h.prelevements_sociaux),
         ("Plafond PER", h.plafond_per_revenus),
         ("Part amortissable", h.part_amortissable),
+        ("Taux maximal du compte d'associés", h.taux_max_compte_associes),
         ("Taux IS réduit", h.is_taux_reduit),
         ("Taux IS normal", h.is_taux_normal),
         ("Pondération des loyers bancaires", h.ponderation_loyers_bancaire),

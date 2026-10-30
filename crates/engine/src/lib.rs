@@ -1315,6 +1315,8 @@ mod tests {
             loyers_mensuels: 1_400.0,
             charges_mensuelles: 200.0,
             distribution_pct: 0.0,
+            compte_associes: 0.0,
+            compte_associes_taux_pct: 0.0,
         }];
         let sans = calculer(&q, &h);
         assert_eq!(sans.immobilier.cash_flow_total_mensuel_eur, 0.0);
@@ -1379,6 +1381,8 @@ mod tests {
             loyers_mensuels: 1_200.0,
             charges_mensuelles: 200.0,
             distribution_pct: 0.0,
+            compte_associes: 0.0,
+            compte_associes_taux_pct: 0.0,
         };
         q.ventes = vec![VenteImmobiliere {
             libelle: "Vente SCI".into(),

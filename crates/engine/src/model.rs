@@ -308,6 +308,13 @@ pub struct Sci {
     /// SCI à l'IS : part du résultat distribuée aux associés (%). Le reste est capitalisé
     /// dans la société et ne constitue donc pas un revenu passif du foyer.
     pub distribution_pct: f64,
+    /// SCI à l'IS : somme avancée à la société par les associés (compte courant d'associés),
+    /// tous associés confondus. Elle se récupère sans impôt, et peut porter intérêts.
+    #[serde(default)]
+    pub compte_associes: f64,
+    /// Taux annuel (%) des intérêts versés sur le compte d'associés, fixé chaque année.
+    #[serde(default)]
+    pub compte_associes_taux_pct: f64,
 }
 
 impl Sci {
@@ -620,6 +627,8 @@ impl Questionnaire {
                 loyers_mensuels: 1_150.0,
                 charges_mensuelles: 250.0,
                 distribution_pct: 0.0,
+                compte_associes: 0.0,
+                compte_associes_taux_pct: 0.0,
             }],
             ventes: vec![VenteImmobiliere {
                 libelle: "Vendre l'appartement locatif".into(),

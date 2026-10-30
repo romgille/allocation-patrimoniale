@@ -40,8 +40,9 @@ ponderation_loyers_bancaire: number,
 part_amortissable: number, duree_amortissement_ans: number, is_taux_reduit: number, is_seuil_taux_reduit: number, is_taux_normal: number, 
 /**
  * Déficit foncier imputable sur le revenu global (par an).
+ * Taux maximal d'intérêts déductibles sur un compte courant d'associés (annuel).
  */
-deficit_foncier_max: number, 
+taux_max_compte_associes: number, deficit_foncier_max: number, 
 /**
  * Taux d'impôt sur la plus-value immobilière des particuliers (hors prélèvements
  * sociaux et surtaxe).

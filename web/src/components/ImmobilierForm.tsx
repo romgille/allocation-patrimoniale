@@ -158,6 +158,27 @@ export function ImmobilierForm({ q, onChange }: Props) {
                   aide="Ce qui reste dans la société grossit votre patrimoine mais n'est pas un revenu passif."
                 />
               )}
+              {s.regime === 'is' && (
+                <NumberField
+                  label="Compte courant d'associés"
+                  unite="€"
+                  value={s.compte_associes}
+                  onChange={(v) => majSci(i, { compte_associes: v })}
+                  min={0}
+                  aide="Sommes avancées à la société par l'ensemble des associés. Elles se récupèrent sans impôt, et peuvent porter intérêts."
+                />
+              )}
+              {s.regime === 'is' && s.compte_associes > 0 && (
+                <NumberField
+                  label="Taux d'intérêt du compte d'associés"
+                  unite="%"
+                  value={s.compte_associes_taux_pct}
+                  onChange={(v) => majSci(i, { compte_associes_taux_pct: v })}
+                  min={0}
+                  max={30}
+                  aide="Fixé chaque année. Les intérêts sont déductibles de l'IS jusqu'au taux maximal des hypothèses et imposés au PFU chez l'associé."
+                />
+              )}
             </div>
             {credits.length > 0 && (
               <p className="aide">
@@ -186,6 +207,8 @@ export function ImmobilierForm({ q, onChange }: Props) {
               loyers_mensuels: 0,
               charges_mensuelles: 0,
               distribution_pct: 0,
+              compte_associes: 0,
+              compte_associes_taux_pct: 0,
             },
           ])
         }

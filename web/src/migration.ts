@@ -89,6 +89,13 @@ function versV3(v2: QuestionnaireV2): Questionnaire {
   }
 }
 
+function avecCompteAssocies(q: Questionnaire): Questionnaire {
+  return {
+    ...q,
+    scis: q.scis.map((s) => ({ ...s, compte_associes: s.compte_associes ?? 0, compte_associes_taux_pct: s.compte_associes_taux_pct ?? 0 })),
+  }
+}
+
 /**
  * Lit un fichier de sauvegarde, en migrant les anciennes versions.
  * Renvoie `null` si le contenu n'est pas reconnu.
@@ -96,7 +103,8 @@ function versV3(v2: QuestionnaireV2): Questionnaire {
 export function lireSauvegarde(x: unknown): { sauvegarde: Sauvegarde; migree: boolean } | null {
   if (!estObjet(x) || x.format !== 'allocation-patrimoniale') return null
   if (!estObjet(x.questionnaire) || !estObjet(x.hypotheses)) return null
-  const hypotheses = x.hypotheses as Hypotheses
+  // Les sauvegardes antérieures au compte d'associés n'ont pas ces champs.
+  const hypotheses = { ...(x.hypotheses as Hypotheses), taux_max_compte_associes: (x.hypotheses as Hypotheses).taux_max_compte_associes ?? 0.0433 }
   const date = typeof x.date === 'string' ? x.date : new Date().toISOString()
   const emballer = (questionnaire: Questionnaire, migree: boolean) => ({
     sauvegarde: { format: 'allocation-patrimoniale' as const, version: VERSION_SAUVEGARDE, date, questionnaire, hypotheses },
@@ -104,13 +112,13 @@ export function lireSauvegarde(x: unknown): { sauvegarde: Sauvegarde; migree: bo
   })
 
   if (x.version === VERSION_SAUVEGARDE && Array.isArray(x.questionnaire.adultes)) {
-    return emballer(x.questionnaire as unknown as Questionnaire, false)
+    return emballer(avecCompteAssocies(x.questionnaire as unknown as Questionnaire), false)
   }
   if (x.version === 2 && Array.isArray(x.questionnaire.adultes)) {
-    return emballer(versV3(x.questionnaire as unknown as QuestionnaireV2), true)
+    return emballer(avecCompteAssocies(versV3(x.questionnaire as unknown as QuestionnaireV2)), true)
   }
   if (x.version === 1 && typeof x.questionnaire.age === 'number') {
-    return emballer(versV3(versV2(x.questionnaire as unknown as QuestionnaireV1)), true)
+    return emballer(avecCompteAssocies(versV3(versV2(x.questionnaire as unknown as QuestionnaireV1))), true)
   }
   return null
 }

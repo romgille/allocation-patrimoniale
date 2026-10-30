@@ -204,7 +204,9 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
         } else {
             // Le produit remonte aux associés, mais seul le gain réalisé (plus-value nette
             // d'IS) est un revenu taxable au PFU : le reste restitue les apports.
-            let gain_taxable = (base - impot).max(0.0).min(produit_societe);
+            // Le compte d'associés est d'abord remboursé, sans impôt.
+            let compte_associes = sci.map(|s| s.compte_associes).unwrap_or(0.0) * part;
+            let gain_taxable = (base - impot).max(0.0).min((produit_societe - compte_associes).max(0.0));
             (produit_societe - gain_taxable * h.pfu) * quote_part
         }
     } else {
@@ -343,6 +345,8 @@ mod tests {
             loyers_mensuels: 1_200.0,
             charges_mensuelles: 200.0,
             distribution_pct: 0.0,
+            compte_associes: 0.0,
+            compte_associes_taux_pct: 0.0,
         }];
         q.dettes = vec![];
         q.ventes = vec![VenteImmobiliere {
@@ -379,6 +383,8 @@ mod tests {
             loyers_mensuels: 0.0,
             charges_mensuelles: 0.0,
             distribution_pct: 0.0,
+            compte_associes: 0.0,
+            compte_associes_taux_pct: 0.0,
         }];
         q.dettes = vec![];
         q.ventes = vec![VenteImmobiliere {
@@ -395,6 +401,16 @@ mod tests {
         let gain_net_is = c.plus_value_brute_eur - c.impot_eur;
         let attendu = 400_000.0 - c.impot_eur - gain_net_is * h.pfu;
         assert!((c.produit_net_eur - attendu).abs() < 1.0, "{} vs {attendu}", c.produit_net_eur);
+
+        // Un compte d'associés rendu avant le reste ne change pas le total, tant que le
+        // produit couvre le gain taxable.
+        q.scis[0].compte_associes = 150_000.0;
+        let avec = cession(&q, &q.ventes[0], &h);
+        assert!((avec.produit_net_eur - c.produit_net_eur).abs() < 1.0);
+        // Au-delà du produit, le gain taxable est plafonné : moins de PFU.
+        q.scis[0].compte_associes = 395_000.0;
+        let plafonne = cession(&q, &q.ventes[0], &h);
+        assert!(plafonne.produit_net_eur > c.produit_net_eur);
     }
 
     #[test]
