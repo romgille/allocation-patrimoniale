@@ -414,6 +414,12 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
             pct(h.ponderation_loyers_bancaire)
         )));
     }
+    if f.effort_locatif > 0.0 {
+        alertes.push(Alerte::attention(format!(
+            "Le locatif en direct a un cash-flow négatif : {} par mois à la charge du foyer, déduits de sa capacité d'épargne.",
+            eur(f.effort_locatif)
+        )));
+    }
     if f.effort_scis > 0.0 {
         alertes.push(Alerte::attention(format!(
             "Les SCI demandent un effort de {} par mois au foyer : leurs loyers ne couvrent pas leurs charges et leurs crédits. C'est autant d'épargne en moins.",
@@ -549,26 +555,15 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
 
     // Épargne libérée au fil du temps : fin des crédits du foyer, fin de l'effort sur une
     // SCI vendue, et mensualités que la vente d'un bien fait disparaître.
-    let vente_directe = q.ventes.iter().find(|v| matches!(&v.bien, BienVendu::LocatifDirect));
     let mut liberations: Vec<(u32, f64)> = q
-        .dettes_foyer()
-        .filter(|d| {
-            vente_directe.is_none()
-                || d.objet != ObjetCredit::Locatif
-                || d.fin_mois().is_some_and(|fin| fin <= vente_directe.unwrap().dans_ans * 12)
-        })
+        .dettes_budget()
         .filter_map(|d| d.fin_mois().map(|fin| (fin, d.mensualite)))
         .collect();
     let bilans = q.bilans_scis(h);
-    for (v, c) in q.ventes.iter().zip(ventes.iter()) {
+    for v in &q.ventes {
         match &v.bien {
             BienVendu::LocatifDirect => {
-                liberations.push((v.dans_ans * 12, c.mensualites_liberees_eur));
-                for d in q.dettes_foyer().filter(|d| d.objet == ObjetCredit::Locatif) {
-                    if let Some(fin) = d.fin_mois() {
-                        liberations.push((fin, d.mensualite * (1.0 - v.part_vendue())));
-                    }
-                }
+                liberations.push((v.dans_ans * 12, f.effort_locatif * v.part_vendue()));
             }
             BienVendu::Sci { id } => {
             if let Some(b) = bilans.iter().find(|b| &b.id == id) {
