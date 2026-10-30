@@ -559,12 +559,38 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
         .dettes_budget()
         .filter_map(|d| d.fin_mois().map(|fin| (fin, d.mensualite)))
         .collect();
+    // Effort du locatif direct : il baisse à chaque fin de crédit locatif (à hauteur de la
+    // mensualité, sans jamais devenir négatif) et de la part vendue du bien.
+    let fins_locatif: Vec<(u32, f64)> = q
+        .dettes_foyer()
+        .filter(|d| d.objet == ObjetCredit::Locatif)
+        .filter_map(|d| d.fin_mois().map(|fin| (fin, d.mensualite)))
+        .collect();
+    let ventes_locatif: Vec<(u32, f64)> = q
+        .ventes
+        .iter()
+        .filter(|v| matches!(v.bien, BienVendu::LocatifDirect))
+        .map(|v| (v.dans_ans * 12, v.part_vendue()))
+        .collect();
+    let mut mois_evenements: Vec<u32> =
+        fins_locatif.iter().map(|(m, _)| *m).chain(ventes_locatif.iter().map(|(m, _)| *m)).collect();
+    mois_evenements.sort_unstable();
+    mois_evenements.dedup();
+    let effort_a = |mois: u32| -> f64 {
+        let termine: f64 = fins_locatif.iter().filter(|(m, _)| *m <= mois).map(|(_, e)| e).sum();
+        let reste: f64 = ventes_locatif.iter().filter(|(m, _)| *m <= mois).map(|(_, p)| 1.0 - p).product();
+        (f.effort_locatif - termine).max(0.0) * reste
+    };
+    let mut effort_precedent = f.effort_locatif;
+    for m in mois_evenements {
+        let effort = effort_a(m);
+        liberations.push((m, effort_precedent - effort));
+        effort_precedent = effort;
+    }
     let bilans = q.bilans_scis(h);
     for v in &q.ventes {
         match &v.bien {
-            BienVendu::LocatifDirect => {
-                liberations.push((v.dans_ans * 12, f.effort_locatif * v.part_vendue()));
-            }
+            BienVendu::LocatifDirect => {}
             BienVendu::Sci { id } => {
             if let Some(b) = bilans.iter().find(|b| &b.id == id) {
                 liberations.push((v.dans_ans * 12, b.effort_mensuel_eur * v.part_vendue()));
@@ -1214,6 +1240,30 @@ mod tests {
         assert!(r.poche_2.flux_moyen_simule_eur > r.poche_2.flux_disponible_regime_eur);
         // La capacité d'épargne d'aujourd'hui, elle, ne change pas.
         assert!(approx(r.budget.capacite_calculee_eur, calculer(&q, &h).budget.capacite_calculee_eur, 1e-9));
+    }
+
+    #[test]
+    fn la_fin_d_un_credit_locatif_libere_l_effort_restant() {
+        let h = Hypotheses::default();
+        let mut q = q_simple();
+        q.enfants.clear();
+        q.projets.clear();
+        q.h_fire = 20;
+        q.cf_immo = -150.0;
+        let credit = |duree| Dette {
+            libelle: "Crédit locatif".into(),
+            taux_pct: 2.0,
+            restant_du: 30_000.0,
+            mensualite: 600.0,
+            duree_restante_mois: duree,
+            objet: ObjetCredit::Locatif,
+            sci_id: None,
+        };
+        q.dettes = vec![credit(0)];
+        let sans_duree = calculer(&q, &h).poche_2.capital_projete_eur;
+        q.dettes = vec![credit(12)];
+        let avec_duree = calculer(&q, &h).poche_2.capital_projete_eur;
+        assert!(avec_duree > sans_duree);
     }
 
     #[test]
