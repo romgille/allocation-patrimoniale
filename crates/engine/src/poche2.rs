@@ -15,13 +15,9 @@ pub fn score(q: &Questionnaire, h: &Hypotheses) -> (f64, Vec<DetailScore>) {
         format!("Tolérance au risque ({}/5)", f.tol_risque)
     };
     let mut d = vec![DetailScore { libelle: tol_libelle, points: f.tol_risque as f64 }];
-    let hf = if q.h_fire > h.h_fire_long {
-        1.0
-    } else if q.h_fire < h.h_fire_court {
-        -1.0
-    } else {
-        0.0
-    };
+    // L'horizon court n'est pas pénalisé ici : `allocation_cible` abaisse déjà le profil
+    // d'un cran, le compter aussi dans le score le pénaliserait deux fois.
+    let hf = if q.h_fire > h.h_fire_long { 1.0 } else { 0.0 };
     d.push(DetailScore { libelle: format!("Horizon revenus passifs ({} ans)", q.h_fire), points: hf });
     let st = if f.stab_ponderee >= 2.5 {
         1.0
@@ -448,6 +444,16 @@ mod tests {
         assert!(approx(b.immobilier, 0.70));
         assert!(b.fonds_euros_obligations >= 0.10 - 1e-9);
         assert!(b.or >= 0.05 - 1e-9);
+    }
+
+    #[test]
+    fn horizon_court_pas_double_penalite_dans_le_score() {
+        let h = Hypotheses::default();
+        let mut q = Questionnaire::exemple();
+        let (s15, _) = score(&q, &h);
+        q.h_fire = 5;
+        let (s5, _) = score(&q, &h);
+        assert!(approx(s5, s15));
     }
 
     #[test]
