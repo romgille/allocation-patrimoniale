@@ -347,6 +347,7 @@ fn budget(q: &Questionnaire, f: &Foyer) -> Budget {
         postes,
         total_depenses_eur: f.depenses,
         mensualites_credits_eur: f.mensualites,
+        effort_locatif_eur: f.effort_locatif,
         capacite_calculee_eur: f.capacite_calculee,
         epargne_retenue_eur: f.e_mois,
         epargne_forcee: q.epargne_mensuelle_forcee.is_some(),

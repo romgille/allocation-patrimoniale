@@ -6,7 +6,11 @@ export type Budget = { adultes: Array<RevenuAdulte>, total_revenus_eur: number,
 /**
  * Dépenses regroupées par poste (postes vides omis).
  */
-postes: Array<PosteBudget>, total_depenses_eur: number, mensualites_credits_eur: number, capacite_calculee_eur: number, epargne_retenue_eur: number, epargne_forcee: boolean, 
+postes: Array<PosteBudget>, total_depenses_eur: number, mensualites_credits_eur: number, 
+/**
+ * Cash-flow négatif du locatif en direct, comblé par le foyer.
+ */
+effort_locatif_eur: number, capacite_calculee_eur: number, epargne_retenue_eur: number, epargne_forcee: boolean, 
 /**
  * Épargne retenue / revenus.
  */

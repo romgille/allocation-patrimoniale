@@ -274,6 +274,8 @@ pub struct Budget {
     pub postes: Vec<PosteBudget>,
     pub total_depenses_eur: f64,
     pub mensualites_credits_eur: f64,
+    /// Cash-flow négatif du locatif en direct, comblé par le foyer.
+    pub effort_locatif_eur: f64,
     pub capacite_calculee_eur: f64,
     pub epargne_retenue_eur: f64,
     pub epargne_forcee: bool,
