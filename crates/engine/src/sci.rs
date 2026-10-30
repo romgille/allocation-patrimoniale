@@ -268,9 +268,11 @@ mod tests {
 
     #[test]
     fn sci_a_l_ir_applique_les_prelevements_sociaux_immobiliers() {
-        let mut h = Hypotheses::default();
-        h.prelevements_sociaux = 0.10;
-        h.prelevements_sociaux_immobilier = 0.172;
+        let mut h = Hypotheses {
+            prelevements_sociaux: 0.10,
+            prelevements_sociaux_immobilier: 0.172,
+            ..Hypotheses::default()
+        };
         let b = bilan(&sci(RegimeSci::Ir), &[credit()], Tmi::T30, &h);
         assert!(b.resultat_imposable_eur > 0.0);
         // TMI 30 % + 17,2 % de prélèvements sociaux immobiliers.
