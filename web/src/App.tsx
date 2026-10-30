@@ -331,7 +331,7 @@ export default function App() {
 
       <footer className="pied">
         Outil informatif et pédagogique : ne constitue pas un conseil en investissement. Faire valider la fiscalité
-        (PFU, prélèvements sociaux, LMNP, PER) par une source à jour. {mentionDonnees}
+        (PFU, prélèvements sociaux, LMNP, PER) par une source à jour. {mentionDonnees} Version {__APP_VERSION__}.
       </footer>
     </div>
   )
