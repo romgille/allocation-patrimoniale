@@ -202,9 +202,10 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
         if produit_societe < 0.0 {
             produit_societe * quote_part
         } else {
-            // Une cession est liquidée indépendamment de la distribution annuelle
-            // des bénéfices : le produit exceptionnel remonte aux associés.
-            produit_societe * quote_part * (1.0 - h.pfu)
+            // Le produit remonte aux associés, mais seul le gain réalisé (plus-value nette
+            // d'IS) est un revenu taxable au PFU : le reste restitue les apports.
+            let gain_taxable = (base - impot).max(0.0).min(produit_societe);
+            (produit_societe - gain_taxable * h.pfu) * quote_part
         }
     } else {
         produit_societe * quote_part - impot
@@ -360,6 +361,40 @@ mod tests {
         assert!((c.amortissements_reintegres_eur - 25_500.0).abs() < 1.0);
         assert!((c.plus_value_brute_eur - 25_500.0).abs() < 1.0);
         assert!(c.impot_eur > 0.0);
+    }
+
+    #[test]
+    fn is_pfu_seulement_sur_le_gain() {
+        let h = Hypotheses::default();
+        let mut q = Questionnaire::exemple();
+        q.scis = vec![Sci {
+            id: "s".into(),
+            nom: "SCI".into(),
+            regime: RegimeSci::Is,
+            part_foyer_pct: 100.0,
+            valeur_biens: 300_000.0,
+            base_amortissement: 300_000.0,
+            duree_amortie_ans: 0,
+            scpi: 0.0,
+            loyers_mensuels: 0.0,
+            charges_mensuelles: 0.0,
+            distribution_pct: 0.0,
+        }];
+        q.dettes = vec![];
+        q.ventes = vec![VenteImmobiliere {
+            libelle: "Vente SCI".into(),
+            bien: BienVendu::Sci { id: "s".into() },
+            dans_ans: 0,
+            part_vendue_pct: 100.0,
+            prix_vente: 400_000.0,
+            prix_acquisition: 300_000.0,
+            detention_ans: 5,
+            frais_vente_pct: 0.0,
+        }];
+        let c = cession(&q, &q.ventes[0], &h);
+        let gain_net_is = c.plus_value_brute_eur - c.impot_eur;
+        let attendu = 400_000.0 - c.impot_eur - gain_net_is * h.pfu;
+        assert!((c.produit_net_eur - attendu).abs() < 1.0, "{} vs {attendu}", c.produit_net_eur);
     }
 
     #[test]
