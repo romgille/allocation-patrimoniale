@@ -45,7 +45,8 @@ export function BudgetForm({ q, onChange }: Props) {
     q.dettes.filter((d) => d.sci_id === null && d.objet !== 'locatif').map((d) => d.mensualite),
   )
   const mensualitesScis = somme(q.dettes.filter((d) => d.sci_id !== null).map((d) => d.mensualite))
-  const capacite = revenus - depenses - mensualites - Math.max(0, -q.cf_immo)
+  const effortLocatif = Math.max(0, -q.cf_immo)
+  const capacite = revenus - depenses - mensualites - effortLocatif
 
   const majRevenus = (i: number, revenus: Revenu[]) =>
     set(
@@ -154,6 +155,12 @@ export function BudgetForm({ q, onChange }: Props) {
         <strong>{eur(depenses)}</strong>
         <span>− Mensualités de crédit du foyer</span>
         <strong>{eur(mensualites)}</strong>
+        {effortLocatif > 0 && (
+          <>
+            <span>− Effort du locatif en direct</span>
+            <strong>{eur(effortLocatif)}</strong>
+          </>
+        )}
         <span className="total">= Capacité d'épargne avant effort SCI</span>
         <strong className={`total ${capacite < 0 ? 'ko' : ''}`}>{eur(capacite)}</strong>
       </div>
