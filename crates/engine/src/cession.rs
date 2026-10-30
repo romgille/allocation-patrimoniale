@@ -488,7 +488,7 @@ mod tests {
             prix_acquisition: 400_000.0,
             detention_ans: 5,
             frais_vente_pct: 0.0,
-            apports_restituables: 0.0,
+            apports_restituables: 300_000.0,
         }];
         let c = cession(&q, &q.ventes[0], &h);
         // Aucun gain : le foyer récupère son compte (100 000) + 50 % du reste (150 000).
