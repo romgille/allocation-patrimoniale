@@ -295,12 +295,12 @@ export function ImmobilierForm({ q, onChange }: Props) {
               aide="Agence et diagnostics."
             />
             <NumberField
-              label="Apports et comptes courants remboursables"
+              label="Apports en capital remboursables"
               unite="€"
               value={v.apports_restituables ?? 0}
               onChange={(x) => majVente(i, { apports_restituables: x })}
               min={0}
-              aide="SCI à l'IS : capital et comptes courants d'associé restitués sans taxation à la vente. Le reste du produit distribué est taxé au PFU."
+              aide="SCI à l'IS : capital restitué sans taxation à la vente, hors comptes courants d'associé (remboursés séparément). Le reste du produit distribué est taxé au PFU."
             />
           </div>
         </fieldset>
