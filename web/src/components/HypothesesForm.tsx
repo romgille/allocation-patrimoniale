@@ -179,6 +179,7 @@ export function HypothesesForm({ h, defauts, onChange }: Props) {
           {eurF('is_seuil_taux_reduit', 'Seuil de taux IS réduit')}
           {pctF('is_taux_normal', 'Taux IS normal')}
           {eurF('deficit_foncier_max', 'Déficit foncier imputable / an')}
+          {pctF('taux_max_compte_associes', "Taux maximal d'intérêts déductibles (compte d'associés)", 'Taux fiscal annuel, à mettre à jour chaque année.')}
           {pctF('taux_pv_immobiliere', 'Taux de plus-value immobilière')}
           <NumberField
             label="Revalorisation annuelle de l’immobilier"

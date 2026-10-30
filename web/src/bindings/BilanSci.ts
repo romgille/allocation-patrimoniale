@@ -18,6 +18,10 @@ scpi_eur: number, loyers_annuels_eur: number, charges_annuelles_eur: number, int
  */
 amortissement_annuel_eur: number, 
 /**
+ * IS : intérêts annuels versés aux associés sur leur compte courant (société entière).
+ */
+interets_compte_associes_annuels_eur: number, 
+/**
  * Assiette imposable : résultat foncier (IR) ou résultat fiscal (IS).
  */
 resultat_imposable_eur: number, impot_annuel_eur: number, 

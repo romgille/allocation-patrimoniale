@@ -202,11 +202,22 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
         if produit_societe < 0.0 {
             produit_societe * quote_part
         } else {
-            // Le produit remonte aux associés : seule la restitution des apports et comptes
-            // courants effectivement déclarés est exonérée, le reste est taxé au PFU.
-            let restitution = v.apports_restituables.clamp(0.0, produit_societe);
-            let gain_taxable = produit_societe - restitution;
-            (produit_societe - gain_taxable * h.pfu) * quote_part
+            // Les comptes courants d'associés sont remboursés en premier, sans impôt ; la
+            // créance du foyer lui revient en propre, hors quote-part au capital.
+            let compte_total = sci.map(|s| s.compte_associes).unwrap_or(0.0) * part;
+            let compte_rembourse = compte_total.min(produit_societe);
+            let compte_foyer = if compte_total > 0.0 {
+                sci.map(|s| s.compte_associes_foyer.min(s.compte_associes)).unwrap_or(0.0) * part * compte_rembourse
+                    / compte_total
+            } else {
+                0.0
+            };
+            let reste = produit_societe - compte_rembourse;
+            // Le reste remonte aux associés : seule la restitution des apports effectivement
+            // déclarés est exonérée, le reste est taxé au PFU.
+            let restitution = v.apports_restituables.clamp(0.0, reste);
+            let gain_taxable = reste - restitution;
+            compte_foyer + (reste - gain_taxable * h.pfu) * quote_part
         }
     } else {
         produit_societe * quote_part - impot
@@ -347,6 +358,9 @@ mod tests {
             loyers_mensuels: 1_200.0,
             charges_mensuelles: 200.0,
             distribution_pct: 0.0,
+            compte_associes: 0.0,
+            compte_associes_foyer: 0.0,
+            compte_associes_taux_pct: 0.0,
         }];
         q.dettes = vec![];
         q.ventes = vec![VenteImmobiliere {
@@ -384,6 +398,9 @@ mod tests {
             loyers_mensuels: 0.0,
             charges_mensuelles: 0.0,
             distribution_pct: 0.0,
+            compte_associes: 0.0,
+            compte_associes_foyer: 0.0,
+            compte_associes_taux_pct: 0.0,
         }];
         q.dettes = vec![];
         q.ventes = vec![VenteImmobiliere {
@@ -419,6 +436,9 @@ mod tests {
             loyers_mensuels: 0.0,
             charges_mensuelles: 0.0,
             distribution_pct: 0.0,
+            compte_associes: 0.0,
+            compte_associes_foyer: 0.0,
+            compte_associes_taux_pct: 0.0,
         }];
         q.dettes = vec![];
         q.ventes = vec![VenteImmobiliere {
@@ -439,6 +459,43 @@ mod tests {
     }
 
     #[test]
+    fn is_compte_associes_rembourse_avant_le_gain_taxable() {
+        let h = Hypotheses::default();
+        let mut q = Questionnaire::exemple();
+        q.dettes.retain(|d| d.sci_id.is_none());
+        q.scis = vec![Sci {
+            id: "s".into(),
+            nom: "SCI".into(),
+            regime: RegimeSci::Is,
+            part_foyer_pct: 50.0,
+            valeur_biens: 400_000.0,
+            base_amortissement: 0.0,
+            duree_amortie_ans: 0,
+            scpi: 0.0,
+            loyers_mensuels: 0.0,
+            charges_mensuelles: 0.0,
+            distribution_pct: 0.0,
+            compte_associes: 100_000.0,
+            compte_associes_foyer: 100_000.0,
+            compte_associes_taux_pct: 0.0,
+        }];
+        q.ventes = vec![VenteImmobiliere {
+            libelle: "v".into(),
+            bien: BienVendu::Sci { id: "s".into() },
+            dans_ans: 0,
+            part_vendue_pct: 100.0,
+            prix_vente: 400_000.0,
+            prix_acquisition: 400_000.0,
+            detention_ans: 5,
+            frais_vente_pct: 0.0,
+            apports_restituables: 300_000.0,
+        }];
+        let c = cession(&q, &q.ventes[0], &h);
+        // Aucun gain : le foyer récupère son compte (100 000) + 50 % du reste (150 000).
+        assert!((c.produit_net_eur - 250_000.0).abs() < 1.0, "{}", c.produit_net_eur);
+    }
+
+    #[test]
     fn is_credit_sans_apports_tout_le_produit_au_pfu() {
         let h = Hypotheses::default();
         let mut q = Questionnaire::exemple();
@@ -454,6 +511,9 @@ mod tests {
             loyers_mensuels: 0.0,
             charges_mensuelles: 0.0,
             distribution_pct: 0.0,
+            compte_associes: 0.0,
+            compte_associes_foyer: 0.0,
+            compte_associes_taux_pct: 0.0,
         }];
         q.dettes = vec![Dette {
             libelle: "Crédit SCI".into(),

@@ -38,4 +38,18 @@ charges_mensuelles: number,
  * SCI à l'IS : part du résultat distribuée aux associés (%). Le reste est capitalisé
  * dans la société et ne constitue donc pas un revenu passif du foyer.
  */
-distribution_pct: number, };
+distribution_pct: number, 
+/**
+ * SCI à l'IS : somme avancée à la société par les associés (compte courant d'associés),
+ * tous associés confondus. Elle se récupère sans impôt, et peut porter intérêts.
+ */
+compte_associes: number, 
+/**
+ * Part du compte d'associés appartenant au foyer : les avances ne sont pas forcément
+ * proportionnelles aux parts sociales. Sert aux intérêts et au remboursement du foyer.
+ */
+compte_associes_foyer: number, 
+/**
+ * Taux annuel (%) des intérêts versés sur le compte d'associés, fixé chaque année.
+ */
+compte_associes_taux_pct: number, };

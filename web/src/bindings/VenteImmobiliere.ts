@@ -31,8 +31,9 @@ detention_ans: number,
  */
 frais_vente_pct: number, 
 /**
- * Vente d'un bien de SCI à l'IS : apports en capital et comptes courants d'associé
- * encore remboursables (part du bien vendu), dont la restitution n'est pas taxée.
+ * Vente d'un bien de SCI à l'IS : apports en capital encore remboursables
+ * (part du bien vendu), hors comptes courants d'associé remboursés séparément, dont la
+ * restitution n'est pas taxée.
  * 0 par défaut : tout le produit distribué est alors traité comme un gain taxable.
  */
 apports_restituables: number, };

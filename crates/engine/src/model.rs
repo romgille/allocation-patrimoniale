@@ -308,6 +308,17 @@ pub struct Sci {
     /// SCI à l'IS : part du résultat distribuée aux associés (%). Le reste est capitalisé
     /// dans la société et ne constitue donc pas un revenu passif du foyer.
     pub distribution_pct: f64,
+    /// SCI à l'IS : somme avancée à la société par les associés (compte courant d'associés),
+    /// tous associés confondus. Elle se récupère sans impôt, et peut porter intérêts.
+    #[serde(default)]
+    pub compte_associes: f64,
+    /// Part du compte d'associés appartenant au foyer : les avances ne sont pas forcément
+    /// proportionnelles aux parts sociales. Sert aux intérêts et au remboursement du foyer.
+    #[serde(default)]
+    pub compte_associes_foyer: f64,
+    /// Taux annuel (%) des intérêts versés sur le compte d'associés, fixé chaque année.
+    #[serde(default)]
+    pub compte_associes_taux_pct: f64,
 }
 
 impl Sci {
@@ -347,8 +358,9 @@ pub struct VenteImmobiliere {
     pub detention_ans: u32,
     /// Frais d'agence et de diagnostics, en % du prix de vente.
     pub frais_vente_pct: f64,
-    /// Vente d'un bien de SCI à l'IS : apports en capital et comptes courants d'associé
-    /// encore remboursables (part du bien vendu), dont la restitution n'est pas taxée.
+    /// Vente d'un bien de SCI à l'IS : apports en capital encore remboursables
+    /// (part du bien vendu), hors comptes courants d'associé remboursés séparément, dont la
+    /// restitution n'est pas taxée.
     /// 0 par défaut : tout le produit distribué est alors traité comme un gain taxable.
     #[serde(default)]
     pub apports_restituables: f64,
@@ -638,6 +650,9 @@ impl Questionnaire {
                 loyers_mensuels: 1_150.0,
                 charges_mensuelles: 250.0,
                 distribution_pct: 0.0,
+                compte_associes: 0.0,
+                compte_associes_foyer: 0.0,
+                compte_associes_taux_pct: 0.0,
             }],
             ventes: vec![VenteImmobiliere {
                 libelle: "Vendre l'appartement locatif".into(),

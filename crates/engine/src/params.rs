@@ -225,6 +225,9 @@ pub struct Hypotheses {
     pub is_seuil_taux_reduit: f64,
     pub is_taux_normal: f64,
     /// Déficit foncier imputable sur le revenu global (par an).
+    /// Taux maximal d'intérêts déductibles sur un compte courant d'associés (annuel).
+    #[serde(default = "taux_max_compte_associes_defaut")]
+    pub taux_max_compte_associes: f64,
     pub deficit_foncier_max: f64,
     /// Taux d'impôt sur la plus-value immobilière des particuliers (hors prélèvements
     /// sociaux et surtaxe).
@@ -264,6 +267,10 @@ pub struct Hypotheses {
     // --- Phase revenus passifs ---
     pub annees_derisquage: u32,
     pub annees_coussin: u32,
+}
+
+fn taux_max_compte_associes_defaut() -> f64 {
+    0.0433
 }
 
 fn prelevements_sociaux_immobilier_defaut() -> f64 {
@@ -330,6 +337,7 @@ impl Default for Hypotheses {
             is_taux_reduit: 0.15,
             is_seuil_taux_reduit: 42_500.0,
             is_taux_normal: 0.25,
+            taux_max_compte_associes: taux_max_compte_associes_defaut(),
             deficit_foncier_max: 10_700.0,
             taux_pv_immobiliere: 0.19,
             revalorisation_immobilier: 0.01,
