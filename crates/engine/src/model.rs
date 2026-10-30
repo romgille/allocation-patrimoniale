@@ -347,6 +347,11 @@ pub struct VenteImmobiliere {
     pub detention_ans: u32,
     /// Frais d'agence et de diagnostics, en % du prix de vente.
     pub frais_vente_pct: f64,
+    /// Vente d'un bien de SCI à l'IS : apports en capital et comptes courants d'associé
+    /// encore remboursables (part du bien vendu), dont la restitution n'est pas taxée.
+    /// 0 par défaut : tout le produit distribué est alors traité comme un gain taxable.
+    #[serde(default)]
+    pub apports_restituables: f64,
 }
 
 impl VenteImmobiliere {
@@ -630,6 +635,7 @@ impl Questionnaire {
                 prix_acquisition: 150_000.0,
                 detention_ans: 6,
                 frais_vente_pct: 5.0,
+                apports_restituables: 0.0,
             }],
             dettes: vec![
                 Dette {
