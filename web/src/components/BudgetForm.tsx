@@ -45,7 +45,7 @@ export function BudgetForm({ q, onChange }: Props) {
     q.dettes.filter((d) => d.sci_id === null && d.objet !== 'locatif').map((d) => d.mensualite),
   )
   const mensualitesScis = somme(q.dettes.filter((d) => d.sci_id !== null).map((d) => d.mensualite))
-  const capacite = revenus - depenses - mensualites
+  const capacite = revenus - depenses - mensualites - Math.max(0, -q.cf_immo)
 
   const majRevenus = (i: number, revenus: Revenu[]) =>
     set(
