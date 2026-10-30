@@ -1347,6 +1347,7 @@ mod tests {
             prix_acquisition: 150_000.0,
             detention_ans: 25,
             frais_vente_pct: 0.0,
+            apports_restituables: 0.0,
         }];
         let avec_vente = calculer(&q, &h);
 
@@ -1389,6 +1390,7 @@ mod tests {
             prix_acquisition: 300_000.0,
             detention_ans: 12,
             frais_vente_pct: 0.0,
+            apports_restituables: 0.0,
         }];
 
         // Vendue au prix d'achat : rien à payer pour une SCI à l'IR…

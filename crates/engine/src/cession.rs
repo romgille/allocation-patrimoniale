@@ -202,9 +202,10 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
         if produit_societe < 0.0 {
             produit_societe * quote_part
         } else {
-            // Le produit remonte aux associés, mais seul le gain réalisé (plus-value nette
-            // d'IS) est un revenu taxable au PFU : le reste restitue les apports.
-            let gain_taxable = (base - impot).max(0.0).min(produit_societe);
+            // Le produit remonte aux associés : seule la restitution des apports et comptes
+            // courants effectivement déclarés est exonérée, le reste est taxé au PFU.
+            let restitution = (v.apports_restituables * part).clamp(0.0, produit_societe);
+            let gain_taxable = produit_societe - restitution;
             (produit_societe - gain_taxable * h.pfu) * quote_part
         }
     } else {
@@ -301,6 +302,7 @@ mod tests {
             prix_acquisition: 120_000.0,
             detention_ans: 30,
             frais_vente_pct: 0.0,
+            apports_restituables: 0.0,
         });
         let c = cession(&q, &q.ventes[0], &h);
         assert_eq!(c.impot_eur, 0.0);
@@ -319,6 +321,7 @@ mod tests {
             prix_acquisition: 120_000.0,
             detention_ans: 2,
             frais_vente_pct: 0.0,
+            apports_restituables: 0.0,
         });
         let c = cession(&q, &q.ventes[0], &h);
         // Aucun abattement avant 6 ans : 80 000 € imposés, plus la surtaxe lissée.
@@ -354,6 +357,7 @@ mod tests {
             prix_acquisition: 300_000.0,
             detention_ans: 10,
             frais_vente_pct: 0.0,
+            apports_restituables: 0.0,
         }];
         let c = cession(&q, &q.ventes[0], &h);
         // La vente intervient après trois années déjà amorties : la valeur nette comptable
@@ -390,6 +394,7 @@ mod tests {
             prix_acquisition: 300_000.0,
             detention_ans: 5,
             frais_vente_pct: 0.0,
+            apports_restituables: 300_000.0,
         }];
         let c = cession(&q, &q.ventes[0], &h);
         let gain_net_is = c.plus_value_brute_eur - c.impot_eur;
@@ -419,6 +424,7 @@ mod tests {
             prix_acquisition: 200_000.0,
             detention_ans: 25,
             frais_vente_pct: 0.0,
+            apports_restituables: 0.0,
         }];
         let c = cession(&q, &q.ventes[0], &h);
         // Le capital a été amorti pendant 5 ans : il reste moins que 100 000 €.
@@ -449,6 +455,7 @@ mod tests {
             prix_acquisition: 200_000.0,
             detention_ans: 25,
             frais_vente_pct: 0.0,
+            apports_restituables: 0.0,
         }];
 
         let c = cession(&q, &q.ventes[0], &h);
