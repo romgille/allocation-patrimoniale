@@ -619,7 +619,7 @@ pub fn calculer(q: &Questionnaire, h: &Hypotheses) -> Resultat {
 
     let sim = Simulation {
         capital: capital_fin,
-        e_mois: f.e_mois,
+        e_mois: q.epargne_mensuelle_forcee.map_or(f.capacite_calculee, |e| e.max(0.0)),
         a_combler: p0.manque_eur + du_cher,
         poches: &p1,
         rendement,
