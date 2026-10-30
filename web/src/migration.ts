@@ -92,7 +92,7 @@ function versV3(v2: QuestionnaireV2): Questionnaire {
 function avecCompteAssocies(q: Questionnaire): Questionnaire {
   return {
     ...q,
-    scis: q.scis.map((s) => ({ ...s, compte_associes: s.compte_associes ?? 0, compte_associes_taux_pct: s.compte_associes_taux_pct ?? 0 })),
+    scis: q.scis.map((s) => ({ ...s, compte_associes: s.compte_associes ?? 0, compte_associes_foyer: s.compte_associes_foyer ?? 0, compte_associes_taux_pct: s.compte_associes_taux_pct ?? 0 })),
   }
 }
 
