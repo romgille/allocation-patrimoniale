@@ -186,7 +186,13 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
         regime: sci.regime,
         regime_libelle: sci.regime.libelle().into(),
         part_foyer: part,
-        valeur_nette_eur: ((sci.valeur_biens + sci.scpi) - restant_du) * part,
+        valeur_nette_eur: match sci.regime {
+            RegimeSci::Is => {
+                ((sci.valeur_biens + sci.scpi) - restant_du - sci.compte_associes) * part
+                    + sci.compte_associes_foyer.min(sci.compte_associes)
+            }
+            RegimeSci::Ir => ((sci.valeur_biens + sci.scpi) - restant_du) * part,
+        },
         scpi_eur: sci.scpi * part,
         loyers_annuels_eur: loyers,
         charges_annuelles_eur: charges,
