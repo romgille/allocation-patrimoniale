@@ -224,14 +224,16 @@ export default function App() {
         </span>
       </nav>
 
-      {nouvelleVersion && (
-        <div className="bandeau info">
-          Une nouvelle version de l’application est disponible.
-          <button type="button" className="lien" onClick={() => window.location.reload()}>
-            Recharger
-          </button>
-        </div>
-      )}
+      <div role="status">
+        {nouvelleVersion && (
+          <div className="bandeau info">
+            Une nouvelle version de l’application est disponible.
+            <button type="button" className="lien" onClick={() => window.location.reload()}>
+              Recharger
+            </button>
+          </div>
+        )}
+      </div>
       {erreurReseau && <div className="bandeau erreur">{erreurReseau}</div>}
       {info && (
         <div className="bandeau info">
