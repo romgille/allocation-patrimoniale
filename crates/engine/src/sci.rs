@@ -115,7 +115,7 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
             let is = impot_societes(resultat, h);
             if resultat <= 0.0 && loyers > 0.0 {
                 commentaires.push(
-                    "Résultat fiscal négatif grâce à l'amortissement : aucun IS cette année, le déficit est reportable sans limite de durée."
+                    "Résultat fiscal négatif grâce à l'amortissement : aucun IS cette année. Le déficit est reportable sans limite de durée en droit, mais ce report n'est pas modélisé ici."
                         .into(),
                 );
             }
@@ -168,7 +168,7 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
         interets_annuels_eur: interets,
         amortissement_annuel_eur: amortissement,
         resultat_imposable_eur: resultat,
-        impot_annuel_eur: impot_societe + impot_foyer / part.max(1e-9) * part,
+        impot_annuel_eur: impot_societe + impot_foyer,
         tresorerie_annuelle_eur: tresorerie,
         cash_flow_foyer_mensuel_eur: cash_flow_foyer / 12.0,
         capitalise_annuel_eur: capitalise,
