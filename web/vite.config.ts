@@ -21,10 +21,23 @@ const versionProjet = (): string => {
 //   Nécessite `make wasm` au préalable. Chemin de publication réglable avec BASE_PATH.
 export default defineConfig(({ mode }) => {
   const pages = mode === 'pages'
+  const version = process.env.GITHUB_SHA ?? String(Date.now())
   return {
+    define: {
+      __VERSION_APP__: JSON.stringify(pages ? version : ''),
+      __APP_VERSION__: JSON.stringify(process.env.APP_VERSION ?? versionProjet()),
+    },
     base: pages ? (process.env.BASE_PATH ?? '/allocation-patrimoniale/') : '/',
-    define: { __APP_VERSION__: JSON.stringify(process.env.APP_VERSION ?? versionProjet()) },
-    plugins: [react()],
+    plugins: [
+      react(),
+      // Publie la version du déploiement pour que l'appli détecte qu'une mise à jour est disponible.
+      {
+        name: 'version-deploiement',
+        generateBundle() {
+          if (pages) this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ version }) })
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@moteur': chemin(pages ? './src/moteur/wasm.ts' : './src/moteur/http.ts'),
