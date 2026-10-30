@@ -1154,7 +1154,8 @@ mod tests {
 
     #[test]
     fn crowdfunding_excessif_gele() {
-        let q = Questionnaire::exemple(); // 9 k€ de crowdfunding sur ~108 k€
+        let mut q = Questionnaire::exemple();
+        q.avoirs.crowdfunding_immo = 15_000.0; // nettement au-dessus de 5 % du patrimoine
         let r = calculer(&q, &Hypotheses::default());
         let cf = r.poche_2.lignes.iter().find(|l| l.ligne == Ligne::Crowdfunding).unwrap();
         assert!(cf.gelee);
@@ -1338,7 +1339,7 @@ mod tests {
         assert!(approx(r.budget.mensualites_credits_eur, 1_050.0, 1e-9));
         // … mais elle compte dans la vue bancaire, plus élevée que le taux du foyer seul.
         assert!(r.synthese.taux_endettement_bancaire > r.synthese.taux_endettement);
-        assert_eq!(r.immobilier.credits.len(), 2);
+        assert_eq!(r.immobilier.credits.len(), 3);
         assert!(r.immobilier.credits.iter().any(|c| c.porte_par == "SCI du Moulin"));
     }
 
@@ -1381,6 +1382,7 @@ mod tests {
         q.h_fire = 10;
         q.cf_immo = 400.0;
         q.v_immo_loc = 150_000.0;
+        q.dettes.retain(|d| d.objet != ObjetCredit::Locatif || d.sci_id.is_some());
 
         let sans_vente = calculer(&q, &h);
         q.ventes = vec![VenteImmobiliere {
