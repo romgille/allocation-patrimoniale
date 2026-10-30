@@ -616,9 +616,11 @@ impl Questionnaire {
                 crypto: 0.0,
                 private_equity: 0.0,
             },
-            v_immo_loc: 30_000.0,
+            // Appartement locatif : valeur 190 000 € − crédit 120 000 € = 70 000 € nets ;
+            // 1 000 € de loyers − 773 € de mensualité − 127 € de charges = 100 €.
+            v_immo_loc: 70_000.0,
             cf_immo: 100.0,
-            loyers_immo_loc_mensuels: 900.0,
+            loyers_immo_loc_mensuels: 1_000.0,
             scis: vec![Sci {
                 id: "sci-1".into(),
                 nom: "SCI du Moulin".into(),
@@ -650,6 +652,15 @@ impl Questionnaire {
                     mensualite: 1_050.0,
                     duree_restante_mois: 168,
                     objet: ObjetCredit::ResidencePrincipale,
+                    sci_id: None,
+                },
+                Dette {
+                    libelle: "Crédit appartement locatif".into(),
+                    taux_pct: 2.0,
+                    restant_du: 120_000.0,
+                    mensualite: 773.0,
+                    duree_restante_mois: 180,
+                    objet: ObjetCredit::Locatif,
                     sci_id: None,
                 },
                 Dette {
