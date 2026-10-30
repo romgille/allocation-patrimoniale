@@ -267,6 +267,22 @@ mod tests {
     }
 
     #[test]
+    fn sci_a_l_ir_applique_les_prelevements_sociaux_immobiliers() {
+        let mut h = Hypotheses::default();
+        h.prelevements_sociaux = 0.10;
+        h.prelevements_sociaux_immobilier = 0.172;
+        let b = bilan(&sci(RegimeSci::Ir), &[credit()], Tmi::T30, &h);
+        assert!(b.resultat_imposable_eur > 0.0);
+        // TMI 30 % + 17,2 % de prélèvements sociaux immobiliers.
+        let attendu = b.resultat_imposable_eur * (0.30 + 0.172);
+        assert!((b.impot_annuel_eur - attendu).abs() < 1e-6, "{} vs {}", b.impot_annuel_eur, attendu);
+
+        h.prelevements_sociaux = 0.25;
+        let b2 = bilan(&sci(RegimeSci::Ir), &[credit()], Tmi::T30, &h);
+        assert_eq!(b2.impot_annuel_eur, b.impot_annuel_eur);
+    }
+
+    #[test]
     fn bareme_is_a_deux_taux() {
         let h = Hypotheses::default();
         assert_eq!(impot_societes(-1_000.0, &h), 0.0);
