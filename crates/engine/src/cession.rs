@@ -180,7 +180,7 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
         let assiette_ir = brute * part_ir;
         let assiette_ps = brute * part_ps;
         let impot = assiette_ir * h.taux_pv_immobiliere * quote_part
-            + assiette_ps * h.prelevements_sociaux * quote_part
+            + assiette_ps * h.prelevements_sociaux_immobilier * quote_part
             + surtaxe(assiette_ir * quote_part);
         if part_ir == 0.0 && part_ps == 0.0 {
             commentaires.push(format!("Détention de {annees} ans : plus-value totalement exonérée."));
@@ -321,7 +321,7 @@ mod tests {
         });
         let c = cession(&q, &q.ventes[0], &h);
         // Aucun abattement avant 6 ans : 80 000 € imposés, plus la surtaxe lissée.
-        let attendu = 80_000.0 * (h.taux_pv_immobiliere + h.prelevements_sociaux) + surtaxe(80_000.0);
+        let attendu = 80_000.0 * (h.taux_pv_immobiliere + h.prelevements_sociaux_immobilier) + surtaxe(80_000.0);
         assert!((c.impot_eur - attendu).abs() < 1.0, "{}", c.impot_eur);
         assert!(c.produit_net_eur < 172_000.0);
     }

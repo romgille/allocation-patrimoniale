@@ -192,6 +192,7 @@ pub fn valider(q: &Questionnaire, h: &Hypotheses) -> Result<(), Vec<String>> {
         ("Tolérance de rééquilibrage", h.tolerance_reequilibrage),
         ("PFU", h.pfu),
         ("Prélèvements sociaux", h.prelevements_sociaux),
+        ("Prélèvements sociaux immobilier", h.prelevements_sociaux_immobilier),
         ("Plafond PER", h.plafond_per_revenus),
         ("Part amortissable", h.part_amortissable),
         ("Taux IS réduit", h.is_taux_reduit),

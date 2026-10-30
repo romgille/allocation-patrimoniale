@@ -96,7 +96,7 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
         RegimeSci::Ir => {
             let resultat = loyers - charges - interets;
             let impot = if resultat > 0.0 {
-                resultat * (tmi.pct() as f64 / 100.0 + h.prelevements_sociaux)
+                resultat * (tmi.pct() as f64 / 100.0 + h.prelevements_sociaux_immobilier)
             } else {
                 let deficit_hors_interets = (charges - loyers).max(0.0);
                 let imputable = deficit_hors_interets.min(h.deficit_foncier_max);
