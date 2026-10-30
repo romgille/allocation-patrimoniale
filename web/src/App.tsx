@@ -8,6 +8,7 @@ import { HypothesesForm } from './components/HypothesesForm'
 import { ETAPES, QuestionnaireForm, type Etape } from './components/QuestionnaireForm'
 import { Resultats } from './components/Resultats'
 import { eur } from './format'
+import { useNouvelleVersion } from './nouvelleVersion'
 import { creerSauvegarde, lireSauvegarde, type Sauvegarde } from './migration'
 
 type Vue = 'saisie' | 'resultats' | 'hypotheses'
@@ -61,6 +62,7 @@ function lireBrouillon(): Sauvegarde | null {
 }
 
 export default function App() {
+  const nouvelleVersion = useNouvelleVersion()
   const [q, setQ] = useState<Questionnaire | null>(null)
   const [h, setH] = useState<Hypotheses | null>(null)
   const [defauts, setDefauts] = useState<Hypotheses | null>(null)
@@ -222,6 +224,14 @@ export default function App() {
         </span>
       </nav>
 
+      {nouvelleVersion && (
+        <div className="bandeau info">
+          Une nouvelle version de l’application est disponible.
+          <button type="button" className="lien" onClick={() => window.location.reload()}>
+            Recharger
+          </button>
+        </div>
+      )}
       {erreurReseau && <div className="bandeau erreur">{erreurReseau}</div>}
       {info && (
         <div className="bandeau info">
