@@ -163,7 +163,7 @@ export function ImmobilierForm({ q, onChange }: Props) {
                   label="Compte courant d'associés"
                   unite="€"
                   value={s.compte_associes}
-                  onChange={(v) => majSci(i, { compte_associes: v })}
+                  onChange={(v) => majSci(i, { compte_associes: v, compte_associes_foyer: Math.min(s.compte_associes_foyer ?? 0, v) })}
                   min={0}
                   aide="Sommes avancées à la société par l'ensemble des associés. Elles se récupèrent sans impôt, et peuvent porter intérêts."
                 />
