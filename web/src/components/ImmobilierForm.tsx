@@ -294,6 +294,14 @@ export function ImmobilierForm({ q, onChange }: Props) {
               max={20}
               aide="Agence et diagnostics."
             />
+            <NumberField
+              label="Apports et comptes courants remboursables"
+              unite="€"
+              value={v.apports_restituables ?? 0}
+              onChange={(x) => majVente(i, { apports_restituables: x })}
+              min={0}
+              aide="SCI à l'IS : capital et comptes courants d'associé restitués sans taxation à la vente. Le reste du produit distribué est taxé au PFU."
+            />
           </div>
         </fieldset>
       ))}
@@ -312,6 +320,7 @@ export function ImmobilierForm({ q, onChange }: Props) {
               prix_acquisition: 0,
               detention_ans: 0,
               frais_vente_pct: 5,
+              apports_restituables: 0,
             },
           ])
         }

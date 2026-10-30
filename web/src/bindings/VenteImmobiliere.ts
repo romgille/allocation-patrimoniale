@@ -29,4 +29,10 @@ detention_ans: number,
 /**
  * Frais d'agence et de diagnostics, en % du prix de vente.
  */
-frais_vente_pct: number, };
+frais_vente_pct: number, 
+/**
+ * Vente d'un bien de SCI à l'IS : apports en capital et comptes courants d'associé
+ * encore remboursables (part du bien vendu), dont la restitution n'est pas taxée.
+ * 0 par défaut : tout le produit distribué est alors traité comme un gain taxable.
+ */
+apports_restituables: number, };

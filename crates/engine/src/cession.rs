@@ -202,17 +202,11 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
         if produit_societe < 0.0 {
             produit_societe * quote_part
         } else {
-            // Le produit remonte aux associés, mais seul le gain réalisé (plus-value nette
-            // d'IS) est un revenu taxable au PFU : le reste restitue les apports.
-            // Le compte d'associés est d'abord remboursé, sans impôt.
-            // Il revient à l'associé qui l'a avancé, non au prorata des parts sociales.
-            let compte_total = sci.map(|s| s.compte_associes).unwrap_or(0.0) * part;
-            let compte_foyer = sci.map(|s| s.compte_associes_foyer.min(s.compte_associes)).unwrap_or(0.0) * part;
-            let rembourse_foyer =
-                if compte_total > 0.0 { compte_foyer * (produit_societe / compte_total).min(1.0) } else { 0.0 };
-            let reste = (produit_societe - compte_total).max(0.0);
-            let gain_taxable = (base - impot).max(0.0).min(reste);
-            rembourse_foyer + (reste - gain_taxable * h.pfu) * quote_part
+            // Le produit remonte aux associés : seule la restitution des apports et comptes
+            // courants effectivement déclarés est exonérée, le reste est taxé au PFU.
+            let restitution = v.apports_restituables.clamp(0.0, produit_societe);
+            let gain_taxable = produit_societe - restitution;
+            (produit_societe - gain_taxable * h.pfu) * quote_part
         }
     } else {
         produit_societe * quote_part - impot
@@ -299,7 +293,7 @@ mod tests {
     #[test]
     fn vente_en_direct_apres_longue_detention() {
         let h = Hypotheses::default();
-        let q = q_avec_vente(VenteImmobiliere {
+        let mut q = q_avec_vente(VenteImmobiliere {
             libelle: "Vente".into(),
             bien: BienVendu::LocatifDirect,
             dans_ans: 0,
@@ -308,7 +302,9 @@ mod tests {
             prix_acquisition: 120_000.0,
             detention_ans: 30,
             frais_vente_pct: 0.0,
+            apports_restituables: 0.0,
         });
+        q.dettes.retain(|d| d.sci_id.is_some());
         let c = cession(&q, &q.ventes[0], &h);
         assert_eq!(c.impot_eur, 0.0);
         assert!((c.produit_net_eur - 200_000.0).abs() < 1.0);
@@ -326,6 +322,7 @@ mod tests {
             prix_acquisition: 120_000.0,
             detention_ans: 2,
             frais_vente_pct: 0.0,
+            apports_restituables: 0.0,
         });
         let c = cession(&q, &q.ventes[0], &h);
         // Aucun abattement avant 6 ans : 80 000 € imposés, plus la surtaxe lissée.
@@ -364,6 +361,7 @@ mod tests {
             prix_acquisition: 300_000.0,
             detention_ans: 10,
             frais_vente_pct: 0.0,
+            apports_restituables: 0.0,
         }];
         let c = cession(&q, &q.ventes[0], &h);
         // La vente intervient après trois années déjà amorties : la valeur nette comptable
@@ -403,23 +401,97 @@ mod tests {
             prix_acquisition: 300_000.0,
             detention_ans: 5,
             frais_vente_pct: 0.0,
+            apports_restituables: 300_000.0,
         }];
         let c = cession(&q, &q.ventes[0], &h);
         let gain_net_is = c.plus_value_brute_eur - c.impot_eur;
         let attendu = 400_000.0 - c.impot_eur - gain_net_is * h.pfu;
         assert!((c.produit_net_eur - attendu).abs() < 1.0, "{} vs {attendu}", c.produit_net_eur);
+    }
 
-        // Un compte d'associés rendu avant le reste ne change pas le total, tant que le
-        // produit couvre le gain taxable.
-        q.scis[0].compte_associes = 150_000.0;
-        q.scis[0].compte_associes_foyer = 150_000.0;
-        let avec = cession(&q, &q.ventes[0], &h);
-        assert!((avec.produit_net_eur - c.produit_net_eur).abs() < 1.0);
-        // Au-delà du produit, le gain taxable est plafonné : moins de PFU.
-        q.scis[0].compte_associes = 395_000.0;
-        q.scis[0].compte_associes_foyer = 395_000.0;
-        let plafonne = cession(&q, &q.ventes[0], &h);
-        assert!(plafonne.produit_net_eur > c.produit_net_eur);
+    #[test]
+    fn is_apports_restituables_sans_double_prorata() {
+        let h = Hypotheses::default();
+        let mut q = Questionnaire::exemple();
+        q.scis = vec![Sci {
+            id: "s".into(),
+            nom: "SCI".into(),
+            regime: RegimeSci::Is,
+            part_foyer_pct: 100.0,
+            valeur_biens: 300_000.0,
+            base_amortissement: 300_000.0,
+            duree_amortie_ans: 0,
+            scpi: 0.0,
+            loyers_mensuels: 0.0,
+            charges_mensuelles: 0.0,
+            distribution_pct: 0.0,
+            compte_associes: 0.0,
+            compte_associes_foyer: 0.0,
+            compte_associes_taux_pct: 0.0,
+        }];
+        q.dettes = vec![];
+        q.ventes = vec![VenteImmobiliere {
+            libelle: "Vente SCI".into(),
+            bien: BienVendu::Sci { id: "s".into() },
+            dans_ans: 0,
+            part_vendue_pct: 50.0,
+            prix_vente: 400_000.0,
+            prix_acquisition: 300_000.0,
+            detention_ans: 5,
+            frais_vente_pct: 0.0,
+            apports_restituables: 100_000.0,
+        }];
+        let c = cession(&q, &q.ventes[0], &h);
+        let produit_societe = c.prix_vente_eur - c.impot_eur;
+        let attendu = produit_societe - (produit_societe - 100_000.0) * h.pfu;
+        assert!((c.produit_net_eur - attendu).abs() < 1.0, "{} vs {attendu}", c.produit_net_eur);
+    }
+
+    #[test]
+    fn is_credit_sans_apports_tout_le_produit_au_pfu() {
+        let h = Hypotheses::default();
+        let mut q = Questionnaire::exemple();
+        q.scis = vec![Sci {
+            id: "s".into(),
+            nom: "SCI".into(),
+            regime: RegimeSci::Is,
+            part_foyer_pct: 100.0,
+            valeur_biens: 300_000.0,
+            base_amortissement: 300_000.0,
+            duree_amortie_ans: 0,
+            scpi: 0.0,
+            loyers_mensuels: 0.0,
+            charges_mensuelles: 0.0,
+            distribution_pct: 0.0,
+            compte_associes: 0.0,
+            compte_associes_foyer: 0.0,
+            compte_associes_taux_pct: 0.0,
+        }];
+        q.dettes = vec![Dette {
+            libelle: "Crédit SCI".into(),
+            taux_pct: 2.0,
+            restant_du: 100_000.0,
+            mensualite: 600.0,
+            duree_restante_mois: 200,
+            objet: ObjetCredit::Locatif,
+            sci_id: Some("s".into()),
+        }];
+        q.ventes = vec![VenteImmobiliere {
+            libelle: "Vente SCI".into(),
+            bien: BienVendu::Sci { id: "s".into() },
+            dans_ans: 5,
+            part_vendue_pct: 100.0,
+            prix_vente: 400_000.0,
+            prix_acquisition: 300_000.0,
+            detention_ans: 5,
+            frais_vente_pct: 0.0,
+            apports_restituables: 0.0,
+        }];
+        let c = cession(&q, &q.ventes[0], &h);
+        assert!(c.credit_solde_eur > 0.0);
+        let produit_societe = c.prix_vente_eur - c.credit_solde_eur - c.impot_eur;
+        let attendu = produit_societe * (1.0 - h.pfu);
+        assert!((c.produit_net_eur - attendu).abs() < 1.0, "{} vs {attendu}", c.produit_net_eur);
     }
 
     #[test]
@@ -444,6 +516,7 @@ mod tests {
             prix_acquisition: 200_000.0,
             detention_ans: 25,
             frais_vente_pct: 0.0,
+            apports_restituables: 0.0,
         }];
         let c = cession(&q, &q.ventes[0], &h);
         // Le capital a été amorti pendant 5 ans : il reste moins que 100 000 €.
@@ -474,6 +547,7 @@ mod tests {
             prix_acquisition: 200_000.0,
             detention_ans: 25,
             frais_vente_pct: 0.0,
+            apports_restituables: 0.0,
         }];
 
         let c = cession(&q, &q.ventes[0], &h);
