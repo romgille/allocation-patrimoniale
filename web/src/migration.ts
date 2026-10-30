@@ -103,8 +103,12 @@ function avecCompteAssocies(q: Questionnaire): Questionnaire {
 export function lireSauvegarde(x: unknown): { sauvegarde: Sauvegarde; migree: boolean } | null {
   if (!estObjet(x) || x.format !== 'allocation-patrimoniale') return null
   if (!estObjet(x.questionnaire) || !estObjet(x.hypotheses)) return null
-  // Les sauvegardes antérieures au compte d'associés n'ont pas ces champs.
-  const hypotheses = { ...(x.hypotheses as Hypotheses), taux_max_compte_associes: (x.hypotheses as Hypotheses).taux_max_compte_associes ?? 0.0433 }
+  // Les sauvegardes antérieures n'ont pas les champs compte d'associés ni taux de prélèvements sociaux immobilier.
+  const hypotheses = {
+    ...(x.hypotheses as Hypotheses),
+    taux_max_compte_associes: (x.hypotheses as Hypotheses).taux_max_compte_associes ?? 0.0433,
+    prelevements_sociaux_immobilier: (x.hypotheses as Hypotheses).prelevements_sociaux_immobilier ?? 0.172,
+  }
   const date = typeof x.date === 'string' ? x.date : new Date().toISOString()
   const emballer = (questionnaire: Questionnaire, migree: boolean) => ({
     sauvegarde: { format: 'allocation-patrimoniale' as const, version: VERSION_SAUVEGARDE, date, questionnaire, hypotheses },

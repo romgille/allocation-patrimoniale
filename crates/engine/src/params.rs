@@ -255,6 +255,10 @@ pub struct Hypotheses {
     pub plafond_pea: f64,
     pub pfu: f64,
     pub prelevements_sociaux: f64,
+    /// Prélèvements sociaux sur revenus fonciers et plus-values immobilières (17,2 % : la
+    /// hausse de CSG de la LFSS 2026 ne les concerne pas).
+    #[serde(default = "prelevements_sociaux_immobilier_defaut")]
+    pub prelevements_sociaux_immobilier: f64,
     pub abattement_av_seul: f64,
     pub abattement_av_couple: f64,
     pub abattement_donation: f64,
@@ -267,6 +271,10 @@ pub struct Hypotheses {
 
 fn taux_max_compte_associes_defaut() -> f64 {
     0.0433
+}
+
+fn prelevements_sociaux_immobilier_defaut() -> f64 {
+    0.172
 }
 
 impl Default for Hypotheses {
@@ -350,6 +358,7 @@ impl Default for Hypotheses {
             plafond_pea: 150_000.0,
             pfu: 0.314,
             prelevements_sociaux: 0.186,
+            prelevements_sociaux_immobilier: prelevements_sociaux_immobilier_defaut(),
             abattement_av_seul: 4_600.0,
             abattement_av_couple: 9_200.0,
             abattement_donation: 100_000.0,

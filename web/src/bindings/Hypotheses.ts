@@ -51,4 +51,9 @@ taux_pv_immobiliere: number,
 /**
  * Revalorisation annuelle supposée du prix des biens immobiliers.
  */
-revalorisation_immobilier: number, age_regle_actions: number, actions_max_tolerance_faible: number, plancher_fonds_euros: number, plancher_fonds_euros_horizon_court: number, or_min: number, or_max: number, crowdfunding_max: number, actions_directes_max: number, satellites_max: number, crypto_max: number, immo_max: number, immo_max_gestion_elevee: number, seuil_concentration_immo: number, tolerance_reequilibrage: number, plafond_pea: number, pfu: number, prelevements_sociaux: number, abattement_av_seul: number, abattement_av_couple: number, abattement_donation: number, plafond_per_revenus: number, annees_derisquage: number, annees_coussin: number, };
+revalorisation_immobilier: number, age_regle_actions: number, actions_max_tolerance_faible: number, plancher_fonds_euros: number, plancher_fonds_euros_horizon_court: number, or_min: number, or_max: number, crowdfunding_max: number, actions_directes_max: number, satellites_max: number, crypto_max: number, immo_max: number, immo_max_gestion_elevee: number, seuil_concentration_immo: number, tolerance_reequilibrage: number, plafond_pea: number, pfu: number, prelevements_sociaux: number, 
+/**
+ * Prélèvements sociaux sur revenus fonciers et plus-values immobilières (17,2 % : la
+ * hausse de CSG de la LFSS 2026 ne les concerne pas).
+ */
+prelevements_sociaux_immobilier: number, abattement_av_seul: number, abattement_av_couple: number, abattement_donation: number, plafond_per_revenus: number, annees_derisquage: number, annees_coussin: number, };

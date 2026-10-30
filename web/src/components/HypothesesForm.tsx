@@ -218,7 +218,8 @@ export function HypothesesForm({ h, defauts, onChange }: Props) {
         <div className="grille">
           {eurF('plafond_pea', 'Plafond de versements PEA')}
           {pctF('pfu', 'PFU (flat tax)')}
-          {pctF('prelevements_sociaux', 'Prélèvements sociaux')}
+          {pctF('prelevements_sociaux', 'Prélèvements sociaux (placements financiers)')}
+          {pctF('prelevements_sociaux_immobilier', 'Prélèvements sociaux (immobilier : revenus fonciers, plus-values)')}
           {eurF('abattement_av_seul', 'Abattement AV > 8 ans (seul)')}
           {eurF('abattement_av_couple', 'Abattement AV > 8 ans (couple)')}
           {eurF('abattement_donation', 'Abattement donation parent → enfant')}

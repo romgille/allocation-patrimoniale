@@ -119,7 +119,7 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
         RegimeSci::Ir => {
             let resultat = loyers - charges - interets;
             let impot = if resultat > 0.0 {
-                resultat * (tmi.pct() as f64 / 100.0 + h.prelevements_sociaux)
+                resultat * (tmi.pct() as f64 / 100.0 + h.prelevements_sociaux_immobilier)
             } else {
                 let deficit_hors_interets = (charges - loyers).max(0.0);
                 let imputable = deficit_hors_interets.min(h.deficit_foncier_max);
@@ -344,6 +344,24 @@ mod tests {
         let b = bilan(&s, &[credit()], Tmi::T30, &h);
         assert!((b.valeur_nette_eur - (300_000.0 - 200_000.0) * 0.5).abs() < 1e-6);
         assert!((b.mensualites_mensuelles_eur - 555.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn sci_a_l_ir_applique_les_prelevements_sociaux_immobiliers() {
+        let mut h = Hypotheses {
+            prelevements_sociaux: 0.10,
+            prelevements_sociaux_immobilier: 0.172,
+            ..Hypotheses::default()
+        };
+        let b = bilan(&sci(RegimeSci::Ir), &[credit()], Tmi::T30, &h);
+        assert!(b.resultat_imposable_eur > 0.0);
+        // TMI 30 % + 17,2 % de prélèvements sociaux immobiliers.
+        let attendu = b.resultat_imposable_eur * (0.30 + 0.172);
+        assert!((b.impot_annuel_eur - attendu).abs() < 1e-6, "{} vs {}", b.impot_annuel_eur, attendu);
+
+        h.prelevements_sociaux = 0.25;
+        let b2 = bilan(&sci(RegimeSci::Ir), &[credit()], Tmi::T30, &h);
+        assert_eq!(b2.impot_annuel_eur, b.impot_annuel_eur);
     }
 
     #[test]
