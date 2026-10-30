@@ -96,15 +96,16 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
 
     // Compte courant d'associés (IS uniquement) : les intérêts sont une charge de la société,
     // déductible dans la limite du taux maximal légal ; ils sont un revenu pour les associés.
-    let (interets_associes, interets_associes_deductibles) = match sci.regime {
+    let (interets_associes, interets_associes_deductibles, interets_associes_foyer) = match sci.regime {
         RegimeSci::Is => {
             let taux = (sci.compte_associes_taux_pct / 100.0).max(0.0);
             (
                 sci.compte_associes * taux,
                 sci.compte_associes * taux.min(h.taux_max_compte_associes),
+                sci.compte_associes_foyer.min(sci.compte_associes) * taux,
             )
         }
-        RegimeSci::Ir => (0.0, 0.0),
+        RegimeSci::Ir => (0.0, 0.0, 0.0),
     };
     if interets_associes > interets_associes_deductibles + 0.5 {
         commentaires.push(format!(
@@ -159,7 +160,7 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
             let distribuable = resultat_comptable_apres_is.min(tresorerie.max(0.0));
             let distribue = distribuable * (sci.distribution_pct / 100.0).clamp(0.0, 1.0);
             // Les intérêts du compte d'associés sont versés avant tout dividende, taxés au PFU.
-            let net = (distribue + interets_associes) * part * (1.0 - h.pfu);
+            let net = (distribue * part + interets_associes_foyer) * (1.0 - h.pfu);
             let conserve = tresorerie.max(0.0) - distribue;
             if conserve > 0.5 {
                 commentaires.push(format!(
@@ -222,6 +223,7 @@ mod tests {
             charges_mensuelles: 300.0,
             distribution_pct: 0.0,
             compte_associes: 0.0,
+            compte_associes_foyer: 0.0,
             compte_associes_taux_pct: 0.0,
         }
     }
@@ -313,6 +315,7 @@ mod tests {
         s.loyers_mensuels = 3_000.0;
         let sans = bilan(&s, &[credit()], Tmi::T30, &h);
         s.compte_associes = 100_000.0;
+        s.compte_associes_foyer = 100_000.0;
         s.compte_associes_taux_pct = 6.0;
         let avec = bilan(&s, &[credit()], Tmi::T30, &h);
         assert!((avec.interets_compte_associes_annuels_eur - 6_000.0).abs() < 1e-6);
@@ -322,6 +325,10 @@ mod tests {
         assert!(avec.commentaires.iter().any(|c| c.contains("taux maximal déductible")));
         // Les intérêts sont versés au foyer (nets de PFU) même sans dividende.
         assert!((avec.cash_flow_foyer_mensuel_eur * 12.0 - 6_000.0 * (1.0 - h.pfu)).abs() < 1.0);
+        // Les intérêts suivent l'apport du foyer, pas sa quote-part au capital.
+        s.part_foyer_pct = 50.0;
+        let moitie = bilan(&s, &[credit()], Tmi::T30, &h);
+        assert!((moitie.cash_flow_foyer_mensuel_eur - avec.cash_flow_foyer_mensuel_eur).abs() < 1.0);
         // À l'IR, le compte d'associés est ignoré.
         let mut ir = sci(RegimeSci::Ir);
         ir.compte_associes = 100_000.0;

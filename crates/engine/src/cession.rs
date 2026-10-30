@@ -205,9 +205,14 @@ pub fn cession(q: &Questionnaire, v: &VenteImmobiliere, h: &Hypotheses) -> Cessi
             // Le produit remonte aux associés, mais seul le gain réalisé (plus-value nette
             // d'IS) est un revenu taxable au PFU : le reste restitue les apports.
             // Le compte d'associés est d'abord remboursé, sans impôt.
-            let compte_associes = sci.map(|s| s.compte_associes).unwrap_or(0.0) * part;
-            let gain_taxable = (base - impot).max(0.0).min((produit_societe - compte_associes).max(0.0));
-            (produit_societe - gain_taxable * h.pfu) * quote_part
+            // Il revient à l'associé qui l'a avancé, non au prorata des parts sociales.
+            let compte_total = sci.map(|s| s.compte_associes).unwrap_or(0.0) * part;
+            let compte_foyer = sci.map(|s| s.compte_associes_foyer.min(s.compte_associes)).unwrap_or(0.0) * part;
+            let rembourse_foyer =
+                if compte_total > 0.0 { compte_foyer * (produit_societe / compte_total).min(1.0) } else { 0.0 };
+            let reste = (produit_societe - compte_total).max(0.0);
+            let gain_taxable = (base - impot).max(0.0).min(reste);
+            rembourse_foyer + (reste - gain_taxable * h.pfu) * quote_part
         }
     } else {
         produit_societe * quote_part - impot
@@ -346,6 +351,7 @@ mod tests {
             charges_mensuelles: 200.0,
             distribution_pct: 0.0,
             compte_associes: 0.0,
+            compte_associes_foyer: 0.0,
             compte_associes_taux_pct: 0.0,
         }];
         q.dettes = vec![];
@@ -384,6 +390,7 @@ mod tests {
             charges_mensuelles: 0.0,
             distribution_pct: 0.0,
             compte_associes: 0.0,
+            compte_associes_foyer: 0.0,
             compte_associes_taux_pct: 0.0,
         }];
         q.dettes = vec![];
@@ -405,10 +412,12 @@ mod tests {
         // Un compte d'associés rendu avant le reste ne change pas le total, tant que le
         // produit couvre le gain taxable.
         q.scis[0].compte_associes = 150_000.0;
+        q.scis[0].compte_associes_foyer = 150_000.0;
         let avec = cession(&q, &q.ventes[0], &h);
         assert!((avec.produit_net_eur - c.produit_net_eur).abs() < 1.0);
         // Au-delà du produit, le gain taxable est plafonné : moins de PFU.
         q.scis[0].compte_associes = 395_000.0;
+        q.scis[0].compte_associes_foyer = 395_000.0;
         let plafonne = cession(&q, &q.ventes[0], &h);
         assert!(plafonne.produit_net_eur > c.produit_net_eur);
     }

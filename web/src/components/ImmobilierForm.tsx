@@ -170,6 +170,17 @@ export function ImmobilierForm({ q, onChange }: Props) {
               )}
               {s.regime === 'is' && s.compte_associes > 0 && (
                 <NumberField
+                  label="Dont avancé par le foyer"
+                  unite="€"
+                  value={s.compte_associes_foyer}
+                  onChange={(v) => majSci(i, { compte_associes_foyer: v })}
+                  min={0}
+                  max={s.compte_associes}
+                  aide="Part du compte courant que vous avez financée, indépendante de votre quote-part au capital."
+                />
+              )}
+              {s.regime === 'is' && s.compte_associes > 0 && (
+                <NumberField
                   label="Taux d'intérêt du compte d'associés"
                   unite="%"
                   value={s.compte_associes_taux_pct}
@@ -208,6 +219,7 @@ export function ImmobilierForm({ q, onChange }: Props) {
               charges_mensuelles: 0,
               distribution_pct: 0,
               compte_associes: 0,
+              compte_associes_foyer: 0,
               compte_associes_taux_pct: 0,
             },
           ])

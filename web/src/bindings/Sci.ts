@@ -45,6 +45,11 @@ distribution_pct: number,
  */
 compte_associes: number, 
 /**
+ * Part du compte d'associés appartenant au foyer : les avances ne sont pas forcément
+ * proportionnelles aux parts sociales. Sert aux intérêts et au remboursement du foyer.
+ */
+compte_associes_foyer: number, 
+/**
  * Taux annuel (%) des intérêts versés sur le compte d'associés, fixé chaque année.
  */
 compte_associes_taux_pct: number, };

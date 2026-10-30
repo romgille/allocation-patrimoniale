@@ -312,6 +312,10 @@ pub struct Sci {
     /// tous associés confondus. Elle se récupère sans impôt, et peut porter intérêts.
     #[serde(default)]
     pub compte_associes: f64,
+    /// Part du compte d'associés appartenant au foyer : les avances ne sont pas forcément
+    /// proportionnelles aux parts sociales. Sert aux intérêts et au remboursement du foyer.
+    #[serde(default)]
+    pub compte_associes_foyer: f64,
     /// Taux annuel (%) des intérêts versés sur le compte d'associés, fixé chaque année.
     #[serde(default)]
     pub compte_associes_taux_pct: f64,
@@ -628,6 +632,7 @@ impl Questionnaire {
                 charges_mensuelles: 250.0,
                 distribution_pct: 0.0,
                 compte_associes: 0.0,
+                compte_associes_foyer: 0.0,
                 compte_associes_taux_pct: 0.0,
             }],
             ventes: vec![VenteImmobiliere {

@@ -1316,6 +1316,7 @@ mod tests {
             charges_mensuelles: 200.0,
             distribution_pct: 0.0,
             compte_associes: 0.0,
+            compte_associes_foyer: 0.0,
             compte_associes_taux_pct: 0.0,
         }];
         let sans = calculer(&q, &h);
@@ -1382,6 +1383,7 @@ mod tests {
             charges_mensuelles: 200.0,
             distribution_pct: 0.0,
             compte_associes: 0.0,
+            compte_associes_foyer: 0.0,
             compte_associes_taux_pct: 0.0,
         };
         q.ventes = vec![VenteImmobiliere {
