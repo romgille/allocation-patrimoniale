@@ -160,14 +160,15 @@ pub fn bilan(sci: &Sci, dettes: &[Dette], tmi: Tmi, h: &Hypotheses) -> BilanSci 
             let distribue = distribuable * (sci.distribution_pct / 100.0).clamp(0.0, 1.0);
             // Les intérêts du compte d'associés sont versés avant tout dividende, taxés au PFU.
             let net = (distribue + interets_associes) * part * (1.0 - h.pfu);
-            if distribue < distribuable - 0.5 {
+            let conserve = tresorerie.max(0.0) - distribue;
+            if conserve > 0.5 {
                 commentaires.push(format!(
                     "{} restent dans la SCI : ils font grossir le patrimoine mais ne comptent pas comme revenu passif tant qu'ils ne sont pas distribués (PFU de {} à la distribution).",
-                    eur((distribuable - distribue) * part),
+                    eur(conserve * part),
                     crate::pct_public(h.pfu)
                 ));
             }
-            (net + (tresorerie.min(0.0)) * part, (distribuable - distribue) * part)
+            (net + (tresorerie.min(0.0)) * part, conserve * part)
         }
     };
 
@@ -285,7 +286,9 @@ mod tests {
         let benefice = benefice - impot_societes(b2.resultat_imposable_eur, &h);
         assert!(benefice < b2.tresorerie_annuelle_eur);
         assert!((b2.cash_flow_foyer_mensuel_eur * 12.0 - benefice * (1.0 - h.pfu)).abs() < 1.0);
-        assert_eq!(b2.capitalise_annuel_eur, 0.0);
+        // Le reste de la trésorerie (dont l'amortissement) demeure dans la SCI.
+        let conserve = (b2.tresorerie_annuelle_eur - benefice) * b2.part_foyer;
+        assert!((b2.capitalise_annuel_eur - conserve).abs() < 1.0);
     }
 
     #[test]
